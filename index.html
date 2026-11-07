@@ -1,0 +1,1140 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f6f1e7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16130f" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="读书" />
+    <link rel="icon" href="data:," />
+    <title>读书App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;900&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+      :root{
+        --bg:#f6f1e7; --paper:#fffdf7; --paper2:#efe8da; --ink:#2c2620; --ink2:#57503f;
+        --muted:#8a8172; --line:#ddd3bf; --accent:#a34d28; --accent-ink:#fff8f0;
+        --accent-soft:#f3e2d3; --hl:#f7dd8f; --hl-ink:#2c2620; --good:#2e7d4f; --warn:#b03a2e;
+        --shadow:0 10px 30px rgba(60,45,20,.10);
+        --read-size:19px;
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --bg:#16130f; --paper:#211d17; --paper2:#2a251d; --ink:#ece4d3; --ink2:#c9bda6;
+          --muted:#9a8f7a; --line:#3d362b; --accent:#e08a52; --accent-ink:#211305;
+          --accent-soft:#3a2a1c; --hl:#7a5c14; --hl-ink:#fdf6df; --good:#6fce93; --warn:#ff9a8a;
+          --shadow:0 10px 30px rgba(0,0,0,.45);
+        }
+      }
+      *{box-sizing:border-box}
+      html{-webkit-text-size-adjust:100%}
+      body{
+        margin:0; background:var(--bg); color:var(--ink);
+        font-family:"Noto Sans SC",-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+        line-height:1.55; padding-bottom:env(safe-area-inset-bottom);
+      }
+      button{font:inherit; color:inherit; background:none; border:0; cursor:pointer; -webkit-tap-highlight-color:transparent}
+      button:focus-visible, select:focus-visible, input:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+      .wrap{max-width:780px; margin:0 auto; padding:0 16px}
+      .hidden{display:none !important}
+
+      /* ---------- library ---------- */
+      .lib-head{padding:26px 0 6px}
+      .lib-head h1{font-family:"Noto Serif SC","Songti SC",serif; font-weight:900; font-size:30px; margin:0 0 6px; letter-spacing:.02em}
+      .lib-head p{margin:0; color:var(--ink2); font-size:15px}
+      .import-card{
+        margin:18px 0; background:var(--paper); border:1.5px dashed var(--line); border-radius:20px;
+        padding:22px 18px; text-align:center; box-shadow:var(--shadow);
+      }
+      .import-card.drag{border-color:var(--accent); background:var(--accent-soft)}
+      .import-card .big{font-family:"Noto Serif SC",serif; font-size:19px; font-weight:600; margin:0 0 4px}
+      .import-card .small{color:var(--muted); font-size:13px; margin:0 0 14px}
+      .btn{
+        display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:var(--accent-ink);
+        border-radius:999px; padding:12px 22px; font-weight:700; font-size:15px; min-height:48px;
+      }
+      .btn:active{transform:scale(.98)}
+      .btn.ghost{background:var(--paper); color:var(--ink); border:1px solid var(--line); font-weight:500}
+      .btn.small{min-height:40px; padding:8px 16px; font-size:14px}
+      .btn.danger{color:var(--warn)}
+      .section-t{font-size:13px; font-weight:700; letter-spacing:.14em; color:var(--muted); margin:26px 0 10px}
+      .book-card{
+        background:var(--paper); border:1px solid var(--line); border-radius:16px; padding:16px;
+        margin-bottom:12px; box-shadow:var(--shadow);
+      }
+      .book-card h3{margin:0 0 4px; font-family:"Noto Serif SC",serif; font-size:18px; font-weight:600; word-break:break-word}
+      .meta{color:var(--muted); font-size:13px; display:flex; flex-wrap:wrap; gap:6px 12px}
+      .badge{background:var(--paper2); border-radius:6px; padding:1px 7px; font-size:12px; color:var(--ink2); font-weight:700}
+      .prog{margin-top:10px; font-size:13px; color:var(--ink2)}
+      .progbar{height:6px; background:var(--paper2); border-radius:99px; margin-top:6px; overflow:hidden}
+      .progbar i{display:block; height:100%; background:var(--accent); border-radius:99px}
+      .book-actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px}
+      .empty{
+        border:1px solid var(--line); border-radius:16px; padding:22px 16px; text-align:center; color:var(--muted);
+        background:var(--paper); font-size:14px;
+      }
+      .howto{background:var(--paper); border:1px solid var(--line); border-radius:16px; padding:18px; margin-bottom:14px}
+      .howto h3{margin:0 0 8px; font-size:16px; font-family:"Noto Serif SC",serif}
+      .howto ol,.howto ul{margin:6px 0; padding-left:20px; color:var(--ink2); font-size:14px}
+      .howto li{margin:4px 0}
+      .howto p{color:var(--ink2); font-size:14px; margin:6px 0}
+      .foot{color:var(--muted); font-size:12px; text-align:center; padding:10px 0 34px}
+
+      /* ---------- reader ---------- */
+      .reader-top{
+        position:sticky; top:0; z-index:30; background:var(--bg); background:color-mix(in srgb, var(--bg) 88%, transparent);
+        backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--line);
+      }
+      .reader-top .row{display:flex; align-items:center; gap:6px; padding:8px 10px; max-width:820px; margin:0 auto}
+      .icon-btn{
+        min-width:44px; min-height:44px; border-radius:12px; display:inline-flex; align-items:center; justify-content:center;
+        font-size:15px; padding:0 10px; color:var(--ink);
+      }
+      .icon-btn:active{background:var(--paper2)}
+      .reader-title{flex:1; min-width:0; text-align:center}
+      .reader-title .t{font-weight:700; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+      .reader-title .c{font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+      .chapter-nav{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:14px 0 4px}
+      .chapter-nav .ch-name{font-family:"Noto Serif SC",serif; font-weight:900; font-size:21px; text-align:center; flex:1; min-width:0}
+      .nav-btn{border:1px solid var(--line); background:var(--paper); border-radius:999px; padding:8px 14px; font-size:13px; min-height:40px; white-space:nowrap}
+      .nav-btn:disabled{opacity:.35}
+      .book-body{
+        font-family:"Noto Serif SC","Songti SC","STSong",serif; font-size:var(--read-size); line-height:1.95;
+        padding:8px 2px 30px; letter-spacing:.01em;
+      }
+      .book-body p{margin:0 0 1.1em; text-indent:2em; word-break:break-word}
+      .book-body p.no-indent{text-indent:0}
+      .book-body .s{border-radius:4px; padding:1px 0; cursor:pointer; transition:background .25s}
+      .book-body .s.playing{background:var(--hl); color:var(--hl-ink); box-shadow:0 0 0 2px var(--hl)}
+      .book-body .s.read-here{box-shadow:inset 0 -2px 0 var(--accent)}
+      .end-note{text-align:center; color:var(--muted); font-size:13px; padding:16px 0 8px; font-family:"Noto Sans SC",sans-serif}
+
+      /* ---------- player ---------- */
+      .player{
+        position:fixed; left:0; right:0; bottom:0; z-index:40;
+        background:var(--paper); border-top:1px solid var(--line); box-shadow:0 -8px 28px rgba(0,0,0,.12);
+        padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+      }
+      .player .inner{max-width:820px; margin:0 auto}
+      .now-sent{
+        font-size:13px; color:var(--ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:2px;
+      }
+      .now-status{font-size:12px; color:var(--muted); min-height:16px; margin-bottom:6px}
+      .now-status.err{color:var(--warn)}
+      .ctrl{display:flex; align-items:center; gap:8px}
+      .ctrl .play{
+        width:56px; height:56px; border-radius:50%; background:var(--accent); color:var(--accent-ink);
+        font-size:24px; display:flex; align-items:center; justify-content:center; flex:none;
+      }
+      .ctrl .side{
+        flex:1; min-height:48px; border-radius:12px; background:var(--paper2); font-size:14px; font-weight:500;
+        display:flex; align-items:center; justify-content:center; gap:4px; padding:0 6px;
+      }
+      .ctrl .side:active{filter:brightness(.96)}
+      .ctrl .gear{flex:none; width:48px; min-height:48px; border-radius:12px; background:var(--paper2); font-size:18px}
+      .p-progress{height:5px; background:var(--paper2); border-radius:99px; margin-top:10px; overflow:hidden}
+      .p-progress i{display:block; height:100%; width:0; background:var(--accent)}
+      .p-counts{display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:5px}
+      body.has-player{padding-bottom:196px}
+      .settings{
+        border-top:1px solid var(--line); margin-top:10px; padding-top:12px; display:grid;
+        grid-template-columns:1fr 1fr; gap:12px 14px;
+      }
+      .settings .full{grid-column:1 / -1}
+      .settings label{display:block; font-size:12px; color:var(--muted); margin-bottom:5px; font-weight:700; letter-spacing:.06em}
+      .settings select{
+        width:100%; min-height:44px; border:1px solid var(--line); border-radius:10px; background:var(--paper);
+        color:var(--ink); padding:0 10px; font-size:14px;
+      }
+      .settings input[type=range]{width:100%; min-height:30px; accent-color:var(--accent)}
+      .seg{display:flex; background:var(--paper2); border-radius:12px; padding:3px; gap:3px}
+      .seg button{flex:1; min-height:40px; border-radius:9px; font-size:14px; font-weight:500; color:var(--ink2)}
+      .seg button.on{background:var(--paper); color:var(--ink); font-weight:700; box-shadow:0 1px 5px rgba(0,0,0,.12)}
+      .rate-val{font-size:12px; color:var(--muted)}
+
+      /* ---------- drawer / toast ---------- */
+      .drawer{
+        position:fixed; inset:0; z-index:60; background:rgba(20,15,8,.45); display:flex; align-items:flex-end; justify-content:center;
+      }
+      .drawer .sheet{
+        background:var(--paper); width:100%; max-width:820px; max-height:78vh; overflow:auto;
+        border-radius:20px 20px 0 0; padding:16px 16px calc(20px + env(safe-area-inset-bottom));
+      }
+      .drawer h3{margin:2px 0 12px; font-family:"Noto Serif SC",serif; font-size:18px}
+      .ch-item{
+        width:100%; text-align:left; padding:13px 10px; border-bottom:1px solid var(--line); font-size:15px;
+        display:flex; justify-content:space-between; gap:10px; min-height:48px; align-items:center;
+      }
+      .ch-item .n{color:var(--muted); font-size:12px; flex:none}
+      .ch-item.cur{color:var(--accent); font-weight:700}
+      .toast{
+        position:fixed; left:50%; bottom:210px; transform:translateX(-50%); z-index:80; max-width:min(92vw,520px);
+        background:var(--ink); color:var(--bg); border-radius:12px; padding:11px 16px; font-size:14px;
+        box-shadow:var(--shadow); text-align:center;
+      }
+      @media (min-width:640px){
+        .lib-head h1{font-size:36px}
+        .settings{grid-template-columns:1fr 1fr 1fr}
+        .settings .full{grid-column:1 / -1}
+      }
+      @media (prefers-reduced-motion: reduce){
+        *{transition:none !important}
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- ================= 图书馆 ================= -->
+    <main id="view-library">
+      <div class="wrap">
+        <div class="lib-head">
+          <h1>我的书房</h1>
+          <p>导入手机里的书就能读、能听。点播放后先把句子生成拟真 MP3 再连续播，一般能锁屏、切去别的 App 继续听；真断了，回来点播放也会从停的那句接着听。</p>
+        </div>
+
+        <div class="import-card" id="importCard">
+          <p class="big">导入一本书</p>
+          <p class="small">支持 TXT、EPUB、FB2；PDF 仅支持带文字层的（实验）。MOBI / AZW3 暂时不能直接导入，请先转成 EPUB 或 TXT。带 DRM 版权保护的书无法打开。</p>
+          <button class="btn" id="btnImport" type="button">选择文件导入</button>
+          <input type="file" id="fileInput" class="hidden" accept=".txt,.epub,.fb2,.pdf,text/plain,application/epub+zip,application/pdf" multiple />
+          <p class="small" style="margin:12px 0 0">电脑上也可以把文件拖到这里。书文件本身只存这台手机的浏览器，不整本上传；用拟真 MP3 听书时，正在朗读的那一句会发送给微软语音服务生成音频。</p>
+        </div>
+
+        <div class="section-t">书架</div>
+        <div id="bookList"></div>
+        <div id="bookEmpty" class="empty hidden">书架还是空的。点上面「选择文件导入」，把手机里下载好的 TXT 或 EPUB 书加进来。<br /><br />没有书文件？先点下面的「内置试读」打开示例文本，试一下阅读和听书。</div>
+
+        <div class="section-t">先试一下</div>
+        <div class="book-card">
+          <h3>内置试读 · 一段示例文本</h3>
+          <div class="meta"><span class="badge">示例</span><span>专门用来试断句、停顿和高亮</span></div>
+          <p class="prog">里面有短段落、对话、问句和中英文混排。点「听书」直接从第一句开始听，看两句话、两段话之间有没有停顿。</p>
+          <div class="book-actions">
+            <button class="btn small" id="btnSampleRead" type="button">打开试读</button>
+            <button class="btn small ghost" id="btnSampleListen" type="button">▶ 直接听</button>
+          </div>
+        </div>
+
+        <div class="section-t">在 iPhone 上用</div>
+        <div class="howto">
+          <h3>加到主屏幕，像 App 一样打开</h3>
+          <ol>
+            <li>用 Safari 打开这一页，点底部的「分享」按钮。</li>
+            <li>选「添加到主屏幕」，再点「添加」。</li>
+            <li>以后从主屏幕图标打开，就是全屏的读书界面。</li>
+          </ol>
+        </div>
+        <div class="howto">
+          <h3>后台听书要知道的</h3>
+          <ul>
+            <li>「拟真 MP3」模式：每句先生成一段 MP3 再用播放器连续播，锁屏、切 App、玩游戏时一般能继续，锁屏上能暂停和切上一句 / 下一句。第一句要等约 1–3 秒，后面的句子会提前生成，不用一句一句等。</li>
+            <li>「设备语音」模式：不用生成、点开就念，但用的是系统语音合成，切到后台或锁屏会被系统停掉，只适合亮屏时听。</li>
+            <li>iPhone 内存紧张时（比如大型游戏），系统仍可能回收后台页面，这是 iOS 的限制，原生 App 之外都绕不开。</li>
+          </ul>
+        </div>
+        <div class="howto">
+          <h3>进度记在哪里</h3>
+          <p>看书位置和听书位置分开记，都存在这台手机的这个浏览器里：这次读到哪一章哪一句、听到哪一句，下次打开同一本书会自动回到原处。清掉浏览器网站数据会清掉书和进度；换手机、换浏览器不会同步过去。</p>
+        </div>
+
+        <p class="foot">声音：「拟真 MP3」是微软 Edge TTS 的免费 AI 神经语音（默认晓晓），不是真人录音；生成失败时会自动切到设备语音继续。</p>
+      </div>
+    </main>
+
+    <!-- ================= 阅读器 ================= -->
+    <main id="view-reader" class="hidden">
+      <div class="reader-top">
+        <div class="row">
+          <button class="icon-btn" id="btnBack" type="button" aria-label="返回书房">‹ 书房</button>
+          <div class="reader-title">
+            <div class="t" id="readerBookTitle"></div>
+            <div class="c" id="readerChapTitle"></div>
+          </div>
+          <button class="icon-btn" id="btnFontMinus" type="button" aria-label="减小字号">A−</button>
+          <button class="icon-btn" id="btnFontPlus" type="button" aria-label="增大字号">A＋</button>
+          <button class="icon-btn" id="btnToc" type="button">目录</button>
+        </div>
+      </div>
+      <div class="wrap">
+        <div class="chapter-nav">
+          <button class="nav-btn" id="btnPrevCh" type="button">上一章</button>
+          <div class="ch-name" id="chName"></div>
+          <button class="nav-btn" id="btnNextCh" type="button">下一章</button>
+        </div>
+        <div class="book-body" id="bookBody"></div>
+        <div class="chapter-nav" style="padding-bottom:26px">
+          <button class="nav-btn" id="btnPrevCh2" type="button">上一章</button>
+          <button class="nav-btn" id="btnNextCh2" type="button">下一章</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- ================= 播放器 ================= -->
+    <div class="player hidden" id="player">
+      <div class="inner">
+        <div class="now-sent" id="nowSent">还没开始听书</div>
+        <div class="now-status" id="nowStatus"></div>
+        <div class="ctrl">
+          <button class="side" id="btnPrevSent" type="button">⏮ 上一句</button>
+          <button class="play" id="btnPlay" type="button" aria-label="播放或暂停">▶</button>
+          <button class="side" id="btnNextSent" type="button">下一句 ⏭</button>
+          <button class="gear" id="btnSettings" type="button" aria-label="听书设置">⚙</button>
+        </div>
+        <div class="p-progress"><i id="pBar"></i></div>
+        <div class="p-counts"><span id="pCountL"></span><span id="pCountR"></span></div>
+        <div class="settings hidden" id="settingsPanel">
+          <div class="full">
+            <label>声音模式</label>
+            <div class="seg" id="modeSeg">
+              <button type="button" data-mode="edge">拟真 MP3 · 可后台</button>
+              <button type="button" data-mode="device">设备语音 · 即时</button>
+            </div>
+          </div>
+          <div>
+            <label for="voiceSel">声音</label>
+            <select id="voiceSel"></select>
+          </div>
+          <div>
+            <label for="timerSel">定时关闭</label>
+            <select id="timerSel">
+              <option value="0">不定时</option>
+              <option value="15">15 分钟</option>
+              <option value="30">30 分钟</option>
+              <option value="45">45 分钟</option>
+              <option value="60">60 分钟</option>
+              <option value="90">90 分钟</option>
+            </select>
+          </div>
+          <div>
+            <label for="rateRange">语速 <span class="rate-val" id="rateVal"></span></label>
+            <input type="range" id="rateRange" min="0.7" max="1.5" step="0.05" />
+          </div>
+          <div>
+            <label for="sentPauseSel">句间停顿</label>
+            <select id="sentPauseSel">
+              <option value="150">0.15 秒</option>
+              <option value="350">0.35 秒</option>
+              <option value="600">0.6 秒</option>
+              <option value="900">0.9 秒</option>
+            </select>
+          </div>
+          <div>
+            <label for="paraPauseSel">段间停顿</label>
+            <select id="paraPauseSel">
+              <option value="500">0.5 秒</option>
+              <option value="850">0.85 秒</option>
+              <option value="1200">1.2 秒</option>
+              <option value="1600">1.6 秒</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <audio id="audioEl" preload="auto" playsinline></audio>
+
+    <!-- ================= 目录抽屉 ================= -->
+    <div class="drawer hidden" id="tocDrawer">
+      <div class="sheet">
+        <h3>目录</h3>
+        <div id="tocList"></div>
+        <button class="btn ghost" id="btnCloseToc" type="button" style="width:100%; justify-content:center; margin-top:14px">关闭</button>
+      </div>
+    </div>
+
+    <div class="toast hidden" id="toast"></div>
+
+    <script>
+    'use strict';
+    /* ============================================================
+       读书App：本地导入 + 阅读 + 拟真MP3听书（Edge TTS 直连生成 MP3，
+       <audio> 连续播放，可后台/锁屏；失败自动回退设备语音）
+       进度：阅读位置与听书位置分开存 localStorage（本机本浏览器）
+       ============================================================ */
+    var $ = function(id){ return document.getElementById(id); };
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    function uid(){ return 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+    function fmtSize(n){ if(!n && n!==0) return ''; if(n<1024) return n+' B'; if(n<1048576) return (n/1024).toFixed(1)+' KB'; return (n/1048576).toFixed(2)+' MB'; }
+    function fnv(str){ var h=0x811c9dc5; for(var i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; } return h.toString(36); }
+    var toastTimer=null;
+    function toast(msg, ms){
+      var t=$('toast'); t.textContent=msg; t.classList.remove('hidden');
+      if(toastTimer) clearTimeout(toastTimer);
+      toastTimer=setTimeout(function(){ t.classList.add('hidden'); }, ms||3200);
+    }
+
+    /* ---------------- 设置 ---------------- */
+    var EDGE_VOICES=[
+      {id:'zh-CN-XiaoxiaoNeural', name:'晓晓 · 女声（自然）'},
+      {id:'zh-CN-XiaoyiNeural',   name:'晓伊 · 女声'},
+      {id:'zh-CN-XiaohanNeural',  name:'晓涵 · 女声'},
+      {id:'zh-CN-YunyangNeural',  name:'云扬 · 男声（播音）'},
+      {id:'zh-CN-YunjianNeural',  name:'云健 · 男声'},
+      {id:'zh-CN-YunxiNeural',    name:'云希 · 男声'},
+      {id:'zh-CN-YunfengNeural',  name:'云枫 · 男声'}
+    ];
+    var settings={ mode:'edge', edgeVoice:'zh-CN-XiaoxiaoNeural', deviceVoice:'', rate:1, sentPause:350, paraPause:850, fontSize:19 };
+    try{ var savedSet=JSON.parse(localStorage.getItem('dushu3-settings')||'null'); if(savedSet) for(var k in settings) if(savedSet[k]!=null) settings[k]=savedSet[k]; }catch(e){}
+    function saveSettings(){ try{ localStorage.setItem('dushu3-settings', JSON.stringify(settings)); }catch(e){} }
+    document.documentElement.style.setProperty('--read-size', settings.fontSize+'px');
+
+    /* ---------------- 进度（分开存读/听） ---------------- */
+    function getProgress(bookId){
+      try{ return JSON.parse(localStorage.getItem('dushu3-prog-'+bookId)||'null') || {readCh:0, readSent:0, listenCh:0, listenSent:0}; }
+      catch(e){ return {readCh:0, readSent:0, listenCh:0, listenSent:0}; }
+    }
+    function saveProgress(bookId, patch){
+      var p=getProgress(bookId); for(var k in patch) p[k]=patch[k]; p.at=Date.now();
+      try{ localStorage.setItem('dushu3-prog-'+bookId, JSON.stringify(p)); }catch(e){}
+    }
+
+    /* ---------------- IndexedDB：书的内容 + MP3 缓存 ---------------- */
+    var dbPromise=null;
+    function openDB(){
+      if(dbPromise) return dbPromise;
+      dbPromise=new Promise(function(res, rej){
+        var rq=indexedDB.open('dushu-app-3', 1);
+        rq.onupgradeneeded=function(){
+          rq.result.createObjectStore('books', {keyPath:'id'});
+          rq.result.createObjectStore('audio', {keyPath:'key'});
+        };
+        rq.onsuccess=function(){ res(rq.result); };
+        rq.onerror=function(){ rej(rq.error); };
+      });
+      return dbPromise;
+    }
+    function idb(store, mode, fn){
+      return openDB().then(function(db){
+        return new Promise(function(res, rej){
+          var tx=db.transaction(store, mode); var st=tx.objectStore(store); var out;
+          try{ out=fn(st); }catch(e){ rej(e); return; }
+          if(out && typeof out.addEventListener==='function'){ out.onsuccess=function(){ res(out.result); }; out.onerror=function(){ rej(out.error); }; }
+          else { tx.oncomplete=function(){ res(out); }; tx.onerror=function(){ rej(tx.error); }; }
+        });
+      });
+    }
+    function dbPutBook(book){ return idb('books','readwrite', function(st){ return st.put(book); }); }
+    function dbGetBook(id){ return idb('books','readonly', function(st){ return st.get(id); }); }
+    function dbAllBooks(){ return idb('books','readonly', function(st){ return st.getAll(); }); }
+    function dbDelBook(id){ return idb('books','readwrite', function(st){ return st.delete(id); }); }
+    function dbGetAudio(key){ return idb('audio','readonly', function(st){ return st.get(key); }).catch(function(){ return null; }); }
+    function dbPutAudio(key, blob){ return idb('audio','readwrite', function(st){ return st.put({key:key, blob:blob}); }).catch(function(){}); }
+
+    /* ---------------- 断句 ---------------- */
+    var segmenter=null;
+    try{ if(window.Intl && Intl.Segmenter) segmenter=new Intl.Segmenter('zh-Hans', {granularity:'sentence'}); }catch(e){}
+    function splitSentences(text){
+      var t=String(text||'').replace(/\s+/g,' ').trim();
+      if(!t) return [];
+      var out=[];
+      if(segmenter){
+        try{
+          var parts=segmenter.segment(t), buf='';
+          parts.forEach(function(p){ buf+=p.segment; if(/[。！？!?；;…」』”"）)]\s*$/.test(buf) || buf.length>110){ out.push(buf); buf=''; } });
+          if(buf) out.push(buf);
+          out=out.map(function(s){ return s.trim(); }).filter(Boolean);
+          if(out.length) return mergeShort(out);
+        }catch(e){}
+      }
+      var re=/[^。！？!?；;…]+[。！？!?；;…]+[」』”"）)\]]*|[^。！？!?；;…]+$/g, m;
+      while((m=re.exec(t))!==null){ var s=m[0].trim(); if(s) out.push(s); }
+      if(!out.length) out=[t];
+      return mergeShort(out);
+    }
+    function mergeShort(arr){
+      var out=[];
+      for(var i=0;i<arr.length;i++){
+        var s=arr[i];
+        if(out.length && (s.length<=2 && /^[」』”"）)\]、，,：:]/.test(s))){ out[out.length-1]+=s; continue; }
+        if(out.length && out[out.length-1].length<4 && !/[。！？!?；;…]$/.test(out[out.length-1])){ out[out.length-1]+=s; continue; }
+        out.push(s);
+      }
+      return out;
+    }
+    /* 把章节（段落数组）展开成句子表 */
+    function buildSentences(chapters){
+      var all=[];
+      chapters.forEach(function(ch, ci){
+        var list=[];
+        ch.paragraphs.forEach(function(p, pi){
+          var ss=splitSentences(p);
+          ss.forEach(function(s, si){ list.push({text:s, para:pi, paraStart:si===0, paraEnd:si===ss.length-1}); });
+        });
+        all.push(list);
+      });
+      return all;
+    }
+    function totalSentences(sentByCh){ return sentByCh.reduce(function(a,c){ return a+c.length; },0); }
+    function sentencesBefore(sentByCh, ch){ var n=0; for(var i=0;i<ch;i++) n+=sentByCh[i].length; return n; }
+
+    /* ---------------- TXT 解析 ---------------- */
+    function decodeText(buf){
+      try{ return new TextDecoder('utf-8',{fatal:true}).decode(buf); }
+      catch(e){ try{ return new TextDecoder('gbk').decode(buf); }catch(e2){ return new TextDecoder('utf-8').decode(buf); } }
+    }
+    var CH_RE=/^\s*(第\s*[0-9零一二三四五六七八九十百千两]+\s*[章回节卷]|卷\s*[0-9零一二三四五六七八九十百千两]+|序章|楔子|引子|尾声|后记|番外[^\n]{0,20}|Chapter\s+\d+|CHAPTER\s+\d+)\s*(.*)$/;
+    function parseTXT(text){
+      text=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
+      var lines=text.split('\n'), chapters=[], cur=null;
+      function newCh(title){ cur={title:title||('第'+(chapters.length+1)+'章'), paragraphs:[]}; chapters.push(cur); }
+      newCh('开始');
+      lines.forEach(function(raw){
+        var line=raw.trim();
+        if(!line) return;
+        var m=line.match(CH_RE);
+        if(m && line.length<=48 && (cur.paragraphs.length>0 || chapters.length>1 || cur.title!=='开始')){
+          newCh(line); return;
+        }
+        if(m && line.length<=48 && cur.title==='开始' && cur.paragraphs.length===0){ cur.title=line; return; }
+        cur.paragraphs.push(line.replace(/^[　 ]+/,''));
+      });
+      chapters=chapters.filter(function(c){ return c.paragraphs.length; });
+      if(!chapters.length) chapters=[{title:'全文', paragraphs:text.split(/\n\s*\n/).map(function(s){return s.trim();}).filter(Boolean)}];
+      if(chapters.length===1 && chapters[0].title==='开始') chapters[0].title='全文';
+      return chapters;
+    }
+
+    /* ---------------- EPUB 解析 ---------------- */
+    function resolvePath(base, href){
+      var parts=(base?base.split('/'):[ ]).filter(Boolean), segs=href.split('/');
+      segs.forEach(function(s){ if(s==='..') parts.pop(); else if(s!=='.'&&s!=='') parts.push(s); });
+      return parts.join('/');
+    }
+    async function parseEPUB(buf){
+      if(!window.JSZip) throw new Error('解析组件没加载成功，请检查网络后重试');
+      var zip=await JSZip.loadAsync(buf);
+      var names={}; zip.forEach(function(p,f){ names[p.toLowerCase()]=f; });
+      function file(path){ return names[path.toLowerCase()] || zip.file(path); }
+      var cont=await file('META-INF/container.xml').async('text');
+      var opfPath=(cont.match(/full-path="([^"]+)"/)||[])[1];
+      if(!opfPath) throw new Error('这本 EPUB 结构不完整，找不到内容清单');
+      var opfDir=opfPath.indexOf('/')>=0?opfPath.slice(0,opfPath.lastIndexOf('/')):'';
+      var opfXml=new DOMParser().parseFromString(await file(opfPath).async('text'),'text/xml');
+      var manifest={};
+      Array.prototype.forEach.call(opfXml.querySelectorAll('manifest > item'), function(it){
+        manifest[it.getAttribute('id')]={href:it.getAttribute('href'), props:it.getAttribute('properties')||'', type:it.getAttribute('media-type')||''};
+      });
+      var title=(opfXml.querySelector('metadata > title, metadata title')||{}).textContent||'';
+      var chapters=[];
+      var spine=Array.prototype.slice.call(opfXml.querySelectorAll('spine > itemref'));
+      for(var i=0;i<spine.length;i++){
+        var item=manifest[spine[i].getAttribute('idref')]; if(!item) continue;
+        if(/nav/.test(item.props)) continue;
+        var path=resolvePath(opfDir, decodeURIComponent(item.href));
+        var f=file(path); if(!f) continue;
+        var html=await f.async('text');
+        var doc=new DOMParser().parseFromString(html,'text/html');
+        if(doc.body) Array.prototype.forEach.call(doc.body.querySelectorAll('script,style,img,svg'), function(n){ n.remove(); });
+        var head=doc.querySelector('h1,h2,h3');
+        var chTitle=(head?head.textContent:'').replace(/\s+/g,' ').trim();
+        var paras=[], nodes=doc.body?doc.body.querySelectorAll('p,h1,h2,h3,h4,h5,li,blockquote,pre,div'):[];
+        var seen=new Set();
+        Array.prototype.forEach.call(nodes, function(n){
+          if(n.querySelector && n.querySelector('p,h1,h2,h3,li,blockquote') && n.tagName==='DIV') return;
+          var tx=(n.textContent||'').replace(/\s+/g,' ').trim();
+          if(tx && !seen.has(tx)){ seen.add(tx); paras.push(tx); }
+        });
+        if(!paras.length && doc.body){ paras=doc.body.textContent.split(/\n+/).map(function(s){return s.replace(/\s+/g,' ').trim();}).filter(Boolean); }
+        if(paras.length) chapters.push({title:chTitle||('第'+(chapters.length+1)+'节'), paragraphs:paras});
+      }
+      if(!chapters.length) throw new Error('没能从这本 EPUB 里提取出文字，可能是扫描图片版或受 DRM 保护');
+      return {title:title.trim(), chapters:chapters};
+    }
+
+    /* ---------------- FB2 解析 ---------------- */
+    function parseFB2(text){
+      var doc=new DOMParser().parseFromString(text,'text/xml');
+      var titleEl=doc.querySelector('book-title');
+      var secs=doc.querySelectorAll('body > section'), chapters=[];
+      function parasOf(sec){
+        var out=[]; Array.prototype.forEach.call(sec.querySelectorAll('p'), function(p){ var t=(p.textContent||'').replace(/\s+/g,' ').trim(); if(t) out.push(t); }); return out;
+      }
+      if(secs.length){ Array.prototype.forEach.call(secs, function(sec){
+        var tt=sec.querySelector('title'); var paras=parasOf(sec);
+        if(paras.length) chapters.push({title:(tt?tt.textContent.replace(/\s+/g,' ').trim():'')||('第'+(chapters.length+1)+'节'), paragraphs:paras});
+      }); }
+      if(!chapters.length){ var all=parasOf(doc); if(all.length) chapters=[{title:'全文', paragraphs:all}]; }
+      if(!chapters.length) throw new Error('没能从这本 FB2 里提取出文字');
+      return {title:titleEl?titleEl.textContent.trim():'', chapters:chapters};
+    }
+
+    /* ---------------- PDF 解析（文字层，实验） ---------------- */
+    async function parsePDF(buf){
+      if(!window.pdfjsLib) throw new Error('PDF 组件没加载成功，请检查网络后重试');
+      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      var pdf=await pdfjsLib.getDocument({data:buf}).promise;
+      var chapters=[], curParas=[], curTitle='第 1–10 页', pageStart=1;
+      function flush(endPage){
+        if(curParas.length){ chapters.push({title:pageStart===endPage?('第 '+pageStart+' 页'):('第 '+pageStart+'–'+endPage+' 页'), paragraphs:curParas}); curParas=[]; }
+      }
+      for(var pg=1; pg<=pdf.numPages; pg++){
+        if(pg>pageStart && (pg-pageStart)%10===0){ flush(pg-1); pageStart=pg; }
+        var page=await pdf.getPage(pg); var tc=await page.getTextContent();
+        var lines=[], lastY=null, line='';
+        tc.items.forEach(function(it){
+          var y=Math.round(it.transform[5]);
+          if(lastY===null || Math.abs(y-lastY)<=2){ line+=it.str; }
+          else { if(line.trim()) lines.push(line); line=it.str; }
+          lastY=y; if(it.hasEOL){ if(line.trim()) lines.push(line); line=''; lastY=null; }
+        });
+        if(line.trim()) lines.push(line);
+        lines.forEach(function(ln){
+          ln=ln.replace(/\s+/g,' ').trim(); if(!ln) return;
+          var prev=curParas[curParas.length-1];
+          if(prev && !/[。！？!?；;…”"」』）)]$/.test(prev) && ln.length>1){ curParas[curParas.length-1]=prev+ln; }
+          else curParas.push(ln);
+        });
+      }
+      flush(pdf.numPages);
+      if(!chapters.length) throw new Error('这本 PDF 里没有文字层（多半是扫描图片版），读不了也听不了');
+      return {title:'', chapters:chapters};
+    }
+
+    /* ---------------- 导入 ---------------- */
+    async function importFile(file){
+      var ext=(file.name.split('.').pop()||'').toLowerCase();
+      var buf=await file.arrayBuffer();
+      var parsed=null, fmt=ext.toUpperCase();
+      if(ext==='txt'){ parsed={title:'', chapters:parseTXT(decodeText(buf))}; }
+      else if(ext==='epub'){ parsed=await parseEPUB(buf); }
+      else if(ext==='fb2'){ parsed=parseFB2(decodeText(buf)); }
+      else if(ext==='pdf'){ parsed=await parsePDF(buf); }
+      else if(['mobi','azw3','azw','cbz','umd'].indexOf(ext)>=0){ throw new Error(file.name+'：这个格式暂时不能直接导入，请先转成 EPUB 或 TXT 再导入'); }
+      else { throw new Error(file.name+'：不支持的格式'); }
+      var name=(parsed.title||file.name.replace(/\.[^.]+$/,'')).trim()||'未命名';
+      var book={ id:uid(), name:name, format:fmt, size:file.size, addedAt:Date.now(), chapters:parsed.chapters };
+      book.sentByCh=buildSentences(parsed.chapters);
+      book.totalSent=totalSentences(book.sentByCh);
+      if(!book.totalSent) throw new Error(file.name+'：没有提取到可读的文字');
+      await dbPutBook(book);
+      return book;
+    }
+
+    /* ---------------- 内置试读 ---------------- */
+    var SAMPLE={
+      id:'sample', name:'内置试读 · 示例文本', format:'示例', size:0,
+      chapters:[{ title:'试读', paragraphs:[
+        '雨是从半夜开始下的。',
+        '王医生站在窗前，看了看表。上午九点半，诊室外已经排了十几个人。',
+        '“先别急，”他说，“一个一个来，都有份。”',
+        '小护士笑了。她说：“王医生，你这句话昨天也说了，前天也说了。”',
+        '他愣了一下，也笑了。',
+        '窗外的雨越下越大。雨点敲在玻璃上，噼里啪啦，像谁在轻轻敲门。',
+        '这封 email 是昨天半夜发的，附件里是检查结果的 PDF 版本。王医生打开看了一眼，数字都正常，他把心放回了肚子里。',
+        '“没事了，”他对老人说，“您回家按时吃药，下周再来复查一次。”老人连连点头，嘴里念叨着谢谢，慢慢走出了诊室。',
+        '雨停的时候，天边出了一道很淡的彩虹。',
+        '小护士问：“这就完了？”王医生说：“完了。故事讲到这儿，刚刚好。”'
+      ]}]
+    };
+    SAMPLE.sentByCh=buildSentences(SAMPLE.chapters);
+    SAMPLE.totalSent=totalSentences(SAMPLE.sentByCh);
+
+    /* ---------------- 书架渲染 ---------------- */
+    var libraryCache=[];
+    async function refreshLibrary(){
+      var books=[];
+      try{ books=await dbAllBooks(); }catch(e){}
+      books.sort(function(a,b){ return (b.addedAt||0)-(a.addedAt||0); });
+      libraryCache=books;
+      var list=$('bookList'); list.innerHTML='';
+      $('bookEmpty').classList.toggle('hidden', books.length>0);
+      books.forEach(function(b){
+        var sentByCh=b.sentByCh||buildSentences(b.chapters||[]);
+        var total=b.totalSent||totalSentences(sentByCh);
+        var p=getProgress(b.id);
+        var readIdx=Math.min(sentencesBefore(sentByCh, Math.min(p.readCh, sentByCh.length-1))+(p.readSent||0), total);
+        var pct=total?Math.floor(readIdx/total*100):0;
+        var card=document.createElement('div'); card.className='book-card';
+        card.innerHTML='<h3>'+esc(b.name)+'</h3>'+
+          '<div class="meta"><span class="badge">'+esc(b.format)+'</span><span>'+(b.chapters?b.chapters.length:0)+' 章</span><span>共 '+total+' 句</span>'+(b.size?'<span>'+fmtSize(b.size)+'</span>':'')+'</div>'+
+          '<div class="prog">'+(readIdx>0?('已读到 '+pct+'% · 听到第 '+(sentencesBefore(sentByCh, Math.min(p.listenCh, sentByCh.length-1))+(p.listenSent||0)+1)+' 句'):'还没开始读')+'</div>'+
+          '<div class="progbar"><i style="width:'+pct+'%"></i></div>'+
+          '<div class="book-actions">'+
+            '<button class="btn small" data-act="read">继续阅读</button>'+
+            '<button class="btn small ghost" data-act="listen">▶ 听书</button>'+
+            '<button class="btn small ghost danger" data-act="del">删除</button>'+
+          '</div>';
+        card.querySelector('[data-act="read"]').addEventListener('click', function(){ openBook(b.id, false); });
+        card.querySelector('[data-act="listen"]').addEventListener('click', function(){ openBook(b.id, true); });
+        card.querySelector('[data-act="del"]').addEventListener('click', async function(){
+          await dbDelBook(b.id);
+          try{ localStorage.removeItem('dushu3-prog-'+b.id); }catch(e){}
+          toast('已删除《'+b.name+'》'); refreshLibrary();
+        });
+        list.appendChild(card);
+      });
+    }
+
+    /* ============================================================
+       阅读器 + 播放器
+       ============================================================ */
+    var cur=null;           // {book, ch, sentByCh}
+    var suppressReadSave=false; // 听书翻章时不覆盖阅读进度（读/听分开存）
+    var playing=false, playToken=0, pauseTimerId=null, sleepTimerId=null;
+    var curObjUrl=null;
+    var audioEl=$('audioEl');
+
+    function setStatus(msg, isErr){
+      var el=$('nowStatus'); el.textContent=msg||''; el.className='now-status'+(isErr?' err':'');
+    }
+    function currentSentObj(){
+      if(!cur) return null;
+      var list=cur.sentByCh[cur.ch]; if(!list) return null;
+      return list[cur.s]||null;
+    }
+    function globalListenIndex(){ return sentencesBefore(cur.sentByCh, cur.ch)+cur.s+1; }
+
+    function openBook(bookId, autoListen){
+      var bookPromise = bookId==='sample' ? Promise.resolve(SAMPLE) : dbGetBook(bookId);
+      bookPromise.then(function(book){
+        if(!book){ toast('这本书找不到了，可能已被删除'); return; }
+        stopPlayback(true);
+        if(!book.sentByCh) book.sentByCh=buildSentences(book.chapters);
+        var p=getProgress(book.id);
+        var ch=Math.min(p.readCh||0, book.chapters.length-1);
+        cur={ book:book, ch:ch, s:Math.min(p.listenSent||0, (book.sentByCh[ch]||[]).length-1), sentByCh:book.sentByCh,
+              listenCh:(p.listenCh!=null?p.listenCh:ch) };
+        if(p.listenCh!=null && book.sentByCh[p.listenCh]){ /* 听书位置独立于阅读章 */ }
+        $('view-library').classList.add('hidden');
+        $('view-reader').classList.remove('hidden');
+        $('player').classList.remove('hidden');
+        document.body.classList.add('has-player');
+        $('readerBookTitle').textContent=book.name;
+        renderChapter(ch, p.readSent||0, true);
+        updateNowUI();
+        if(autoListen){
+          var lc=Math.min(p.listenCh!=null?p.listenCh:ch, book.chapters.length-1);
+          var ls=Math.min(p.listenSent||0, (book.sentByCh[lc]||[]).length-1);
+          if(lc!==cur.ch){ suppressReadSave=true; renderChapter(lc, ls, true); suppressReadSave=false; }
+          startListening(lc, ls);
+        }
+        window.scrollTo(0,0);
+      }).catch(function(e){ toast('打开失败：'+(e&&e.message?e.message:e)); });
+    }
+
+    function renderChapter(ch, scrollSent, keepListen){
+      cur.ch=ch;
+      var book=cur.book, chapter=book.chapters[ch];
+      $('readerChapTitle').textContent=chapter.title;
+      $('chName').textContent=chapter.title;
+      $('btnPrevCh').disabled=$('btnPrevCh2').disabled=(ch<=0);
+      $('btnNextCh').disabled=$('btnNextCh2').disabled=(ch>=book.chapters.length-1);
+      var body=$('bookBody'); body.innerHTML='';
+      var sentList=cur.sentByCh[ch];
+      var idxByPara={};
+      sentList.forEach(function(s, i){ (idxByPara[s.para]=idxByPara[s.para]||[]).push(i); });
+      chapter.paragraphs.forEach(function(p, pi){
+        var pel=document.createElement('p');
+        var idxs=idxByPara[pi]||[];
+        if(!idxs.length){ pel.textContent=p; body.appendChild(pel); return; }
+        idxs.forEach(function(gi){
+          var span=document.createElement('span');
+          span.className='s'; span.dataset.s=gi; span.textContent=sentList[gi].text;
+          span.addEventListener('click', function(){ onSentenceTap(gi); });
+          pel.appendChild(span);
+        });
+        body.appendChild(pel);
+      });
+      var end=document.createElement('div'); end.className='end-note';
+      end.textContent = ch>=book.chapters.length-1 ? '—— 本书完 ——' : '—— 本章完，下方按钮翻下一章 ——';
+      body.appendChild(end);
+      markPlayingSpan();
+      if(scrollSent!=null && scrollSent>0){
+        var target=body.querySelector('.s[data-s="'+scrollSent+'"]');
+        if(target){ target.classList.add('read-here'); setTimeout(function(){ target.scrollIntoView({block:'start'}); window.scrollBy(0,-84); },60); }
+      }
+      if(!suppressReadSave) saveProgress(book.id, {readCh:ch, readSent:scrollSent||0});
+    }
+
+    function onSentenceTap(gi){
+      cur.s=gi;
+      saveProgress(cur.book.id, {listenCh:cur.ch, listenSent:gi});
+      updateNowUI(); markPlayingSpan();
+      if(playing){ playCurrent(); }
+      else { setStatus('已定位到这一句，点播放从这句开始听'); }
+    }
+
+    function markPlayingSpan(){
+      Array.prototype.forEach.call(document.querySelectorAll('.book-body .s.playing'), function(n){ n.classList.remove('playing'); });
+      if(!cur) return;
+      var list=cur.sentByCh[cur.ch]; if(!list || !list[cur.s]) return;
+      var span=document.querySelector('.book-body .s[data-s="'+cur.s+'"]');
+      if(span) span.classList.add('playing');
+    }
+    function scrollToCurrentSentence(){
+      var span=document.querySelector('.book-body .s[data-s="'+cur.s+'"]');
+      if(span){ var r=span.getBoundingClientRect(); if(r.top<90 || r.bottom>window.innerHeight-230) span.scrollIntoView({block:'center'}); }
+    }
+
+    function updateNowUI(){
+      if(!cur){ return; }
+      var s=currentSentObj();
+      $('nowSent').textContent=s?('正在读：'+s.text):'还没开始听书';
+      var total=cur.book.totalSent||totalSentences(cur.sentByCh);
+      var gi=globalListenIndex();
+      $('pBar').style.width=(total?Math.min(100, gi/total*100):0)+'%';
+      $('pCountL').textContent='第 '+gi+' / '+total+' 句';
+      $('pCountR').textContent='第 '+(cur.ch+1)+' / '+cur.book.chapters.length+' 章';
+      $('btnPlay').textContent=playing?'⏸':'▶';
+    }
+
+    /* ---------------- 阅读位置跟踪（滚动时记第一句可见句） ---------------- */
+    var scrollTick=false;
+    window.addEventListener('scroll', function(){
+      if(!cur || playing || $('view-reader').classList.contains('hidden')) return;
+      if(scrollTick) return; scrollTick=true;
+      setTimeout(function(){
+        scrollTick=false;
+        var spans=document.querySelectorAll('.book-body .s'), best=null;
+        for(var i=0;i<spans.length;i++){ var r=spans[i].getBoundingClientRect(); if(r.bottom>96){ best=spans[i]; break; } }
+        if(best) saveProgress(cur.book.id, {readCh:cur.ch, readSent:parseInt(best.dataset.s,10)||0});
+      }, 350);
+    }, {passive:true});
+
+    /* ============================================================
+       Edge TTS：WebSocket 直连生成 MP3
+       ============================================================ */
+    function wsEdgeTTS(text, voice, rate){
+      return new Promise(function(resolve, reject){
+        var token='6A5AA1D4EAFF4E9FB37E23D68491D6F4';
+        var connId=fnv('c'+Date.now()+Math.random())+fnv('x'+Math.random());
+        var reqId=fnv('r'+Date.now()+Math.random())+fnv('y'+Math.random());
+        var url='wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken='+token+'&ConnectionId='+connId;
+        var ws, chunks=[], done=false, timer=null;
+        function fail(e){ if(done) return; done=true; try{ ws&&ws.close(); }catch(_){} if(timer) clearTimeout(timer); reject(e||new Error('Edge TTS 连接失败')); }
+        timer=setTimeout(function(){ fail(new Error('生成超时')); }, 20000);
+        try{ ws=new WebSocket(url); }catch(e){ fail(e); return; }
+        ws.binaryType='arraybuffer';
+        ws.onerror=function(){ fail(new Error('Edge TTS 连接被拒绝')); };
+        ws.onclose=function(){ if(!done){ if(chunks.length){ done=true; clearTimeout(timer); resolve(new Blob(chunks,{type:'audio/mpeg'})); } else fail(new Error('连接已断开')); } };
+        ws.onopen=function(){
+          var ts=new Date().toISOString();
+          var cfg='X-Timestamp:'+ts+'\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n'+
+            '{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}';
+          ws.send(cfg);
+          var pct=Math.round((rate-1)*100);
+          var rateStr=(pct>=0?'+':'')+pct+'%';
+          var ssml="<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='"+voice+"'><prosody pitch='+0Hz' rate='"+rateStr+"' volume='+0%'>"+esc(text)+"</prosody></voice></speak>";
+          var msg='X-RequestId:'+reqId+'\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:'+ts+'\r\nPath:ssml\r\n\r\n'+ssml;
+          ws.send(msg);
+        };
+        ws.onmessage=function(ev){
+          if(typeof ev.data==='string'){
+            if(ev.data.indexOf('Path:turn.end')>=0){
+              if(done) return; done=true; clearTimeout(timer);
+              try{ ws.close(); }catch(_){}
+              if(chunks.length) resolve(new Blob(chunks,{type:'audio/mpeg'}));
+              else reject(new Error('没有收到音频'));
+            }
+          } else {
+            var u8=new Uint8Array(ev.data); if(u8.length<2) return;
+            var hLen=(u8[0]<<8)|u8[1];
+            var header=new TextDecoder().decode(u8.slice(2, 2+hLen));
+            if(header.indexOf('Path:audio')>=0){
+              var body=u8.slice(2+hLen);
+              if(body.length) chunks.push(body);
+            }
+          }
+        };
+      });
+    }
+    var memAudioCache={};
+    var edgeDown=false; // 本次播放里 Edge 生成失败过一次就先用设备语音，不逐句重试；重新点播放时再试
+    function audioKey(text){ return fnv(settings.edgeVoice+'|'+settings.rate+'|'+text); }
+    async function getAudioBlob(text){
+      var key=audioKey(text);
+      if(memAudioCache[key]) return memAudioCache[key];
+      var rec=await dbGetAudio(key);
+      if(rec && rec.blob){ memAudioCache[key]=rec.blob; return rec.blob; }
+      var blob=await wsEdgeTTS(text, settings.edgeVoice, settings.rate);
+      memAudioCache[key]=blob; dbPutAudio(key, blob);
+      return blob;
+    }
+    function prefetchNext(){
+      if(settings.mode!=='edge' || edgeDown || !cur) return;
+      var list=cur.sentByCh[cur.ch];
+      [1,2].forEach(function(off){
+        var t=null;
+        if(list && list[cur.s+off]) t=list[cur.s+off].text;
+        else if(!list || cur.s+off>=list.length){
+          var nx=cur.sentByCh[cur.ch+1]; if(nx && nx.length && off===1) t=nx[0].text;
+        }
+        if(t && !memAudioCache[audioKey(t)]) getAudioBlob(t).catch(function(){});
+      });
+    }
+
+    /* ============================================================
+       播放控制
+       ============================================================ */
+    function startListening(ch, s){
+      if(ch!=null) cur.ch=ch;
+      if(s!=null) cur.s=s;
+      edgeDown=false;
+      playing=true; playToken++;
+      updateNowUI();
+      playCurrent();
+    }
+    function stopPlayback(silent){
+      playing=false; playToken++;
+      if(pauseTimerId){ clearTimeout(pauseTimerId); pauseTimerId=null; }
+      try{ audioEl.pause(); }catch(e){}
+      if(window.speechSynthesis){ try{ speechSynthesis.cancel(); }catch(e){} }
+      if(!silent) setStatus('已暂停。下次打开这本书，会从这一句接着听。');
+      updateNowUI();
+    }
+    function togglePlay(){
+      if(!cur) return;
+      if(playing){ stopPlayback(); return; }
+      edgeDown=false;
+      playing=true; playToken++;
+      updateNowUI();
+      playCurrent();
+    }
+    async function playCurrent(){
+      if(!cur || !playing) return;
+      var token=playToken;
+      var s=currentSentObj();
+      if(!s){ advanceChapterOrStop(); return; }
+      markPlayingSpan(); scrollToCurrentSentence(); updateNowUI();
+      saveProgress(cur.book.id, {listenCh:cur.ch, listenSent:cur.s});
+      if(settings.mode==='device' || edgeDown){ speakDevice(s, token); return; }
+      /* 拟真 MP3 模式 */
+      setStatus('正在生成拟真语音…（后面的句子会提前生成）');
+      var blob;
+      try{ blob=await getAudioBlob(s.text); }
+      catch(e){
+        if(token!==playToken || !playing) return;
+        edgeDown=true;
+        setStatus('拟真语音生成失败（'+(e.message||'接口未响应')+'），本次先用设备语音接着念；下次重新点播放会再试拟真语音。', true);
+        speakDevice(s, token);
+        return;
+      }
+      if(token!==playToken || !playing) return;
+      if(curObjUrl){ URL.revokeObjectURL(curObjUrl); curObjUrl=null; }
+      curObjUrl=URL.createObjectURL(blob);
+      audioEl.src=curObjUrl;
+      audioEl.playbackRate=1;
+      setStatus('拟真 MP3 播放中 · 可锁屏 / 切 App 继续听');
+      setupMediaSession();
+      audioEl.play().then(function(){ prefetchNext(); }).catch(function(){ setStatus('点一下播放键开始（浏览器需要一次手动点击）', true); });
+    }
+    function speakDevice(s, token){
+      if(!window.speechSynthesis){ setStatus('这台设备的浏览器不支持语音朗读', true); playing=false; updateNowUI(); return; }
+      speechSynthesis.cancel();
+      var u=new SpeechSynthesisUtterance(s.text);
+      u.rate=settings.rate; u.pitch=1;
+      var v=pickDeviceVoice(); if(v) u.voice=v;
+      u.lang=(v&&v.lang)||'zh-CN';
+      u.onend=function(){ if(token===playToken && playing) scheduleNext(s); };
+      u.onerror=function(ev){ if(ev.error==='interrupted'||ev.error==='canceled') return; if(token===playToken && playing) scheduleNext(s); };
+      setStatus('设备语音播放中 · 切后台或锁屏会被系统停掉');
+      speechSynthesis.speak(u);
+    }
+    function scheduleNext(finished){
+      if(pauseTimerId) clearTimeout(pauseTimerId);
+      var delay=finished && finished.paraEnd ? settings.paraPause : settings.sentPause;
+      var token=playToken;
+      pauseTimerId=setTimeout(function(){ if(token===playToken && playing) stepSentence(1); }, delay);
+    }
+    function stepSentence(dir){
+      if(!cur) return;
+      var list=cur.sentByCh[cur.ch];
+      var ns=cur.s+dir;
+      if(ns>=list.length){
+        if(cur.ch>=cur.book.chapters.length-1){ stopPlayback(true); setStatus('已经听到全书最后一句了'); return; }
+        suppressReadSave=true; renderChapter(cur.ch+1, 0, true); suppressReadSave=false; cur.s=0;
+      } else if(ns<0){
+        if(cur.ch<=0){ cur.s=0; }
+        else { suppressReadSave=true; renderChapter(cur.ch-1, 0, true); suppressReadSave=false; cur.s=cur.sentByCh[cur.ch].length-1; }
+      } else cur.s=ns;
+      playToken++;
+      saveProgress(cur.book.id, {listenCh:cur.ch, listenSent:cur.s});
+      updateNowUI(); markPlayingSpan();
+      if(playing) playCurrent(); else updateNowUI();
+    }
+    function advanceChapterOrStop(){
+      if(cur.ch<cur.book.chapters.length-1){ suppressReadSave=true; renderChapter(cur.ch+1,0,true); suppressReadSave=false; cur.s=0; playCurrent(); }
+      else { stopPlayback(true); setStatus('已经听到全书最后一句了'); }
+    }
+    audioEl.addEventListener('ended', function(){
+      if(!playing || settings.mode!=='edge') return;
+      var s=currentSentObj(); scheduleNext(s);
+    });
+    audioEl.addEventListener('error', function(){ if(playing && settings.mode==='edge') setStatus('这句音频播放失败，点下一句试试', true); });
+
+    /* 设备语音选择 */
+    function deviceVoices(){
+      if(!window.speechSynthesis) return [];
+      return speechSynthesis.getVoices()||[];
+    }
+    function pickDeviceVoice(){
+      var vs=deviceVoices(); if(!vs.length) return null;
+      if(settings.deviceVoice){ for(var i=0;i<vs.length;i++) if(vs[i].voiceURI===settings.deviceVoice) return vs[i]; }
+      var zh=vs.filter(function(v){ return /^zh/i.test(v.lang); });
+      var pref=zh.filter(function(v){ return /xiaoxiao|晓晓|tingting|婷婷|meijia|sin-ji|natural|neural/i.test(v.name); });
+      return pref[0]||zh[0]||vs[0];
+    }
+    if(window.speechSynthesis){ try{ speechSynthesis.onvoiceschanged=function(){ syncVoiceOptions(); }; }catch(e){} }
+
+    /* ---------------- 锁屏 / 后台控制（Media Session） ---------------- */
+    function setupMediaSession(){
+      if(!('mediaSession' in navigator)) return;
+      try{
+        var s=currentSentObj();
+        navigator.mediaSession.metadata=new MediaMetadata({
+          title:cur?cur.book.name:'读书',
+          artist:s?s.text:'',
+          album:cur?cur.book.chapters[cur.ch].title:''
+        });
+        navigator.mediaSession.setActionHandler('play', function(){ if(!playing) togglePlay(); else audioEl.play(); });
+        navigator.mediaSession.setActionHandler('pause', function(){ stopPlayback(); });
+        navigator.mediaSession.setActionHandler('previoustrack', function(){ stepSentence(-1); });
+        navigator.mediaSession.setActionHandler('nexttrack', function(){ stepSentence(1); });
+      }catch(e){}
+    }
+    audioEl.addEventListener('timeupdate', function(){
+      if(!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+      try{ if(audioEl.duration && isFinite(audioEl.duration)) navigator.mediaSession.setPositionState({duration:audioEl.duration, position:audioEl.currentTime, playbackRate:1}); }catch(e){}
+    });
+
+    /* ============================================================
+       设置面板
+       ============================================================ */
+    function syncVoiceOptions(){
+      var sel=$('voiceSel'); sel.innerHTML='';
+      if(settings.mode==='edge'){
+        EDGE_VOICES.forEach(function(v){ var o=document.createElement('option'); o.value=v.id; o.textContent=v.name; sel.appendChild(o); });
+        sel.value=settings.edgeVoice;
+      } else {
+        var vs=deviceVoices();
+        var zh=vs.filter(function(v){ return /^zh/i.test(v.lang); });
+        var list=zh.length?zh:vs;
+        if(!list.length){ var o=document.createElement('option'); o.value=''; o.textContent='系统默认中文语音'; sel.appendChild(o); }
+        list.forEach(function(v){ var o=document.createElement('option'); o.value=v.voiceURI; o.textContent=v.name+'（'+v.lang+'）'; sel.appendChild(o); });
+        var pv=pickDeviceVoice(); if(pv) sel.value=pv.voiceURI;
+      }
+    }
+    function syncSettingsUI(){
+      Array.prototype.forEach.call($('modeSeg').querySelectorAll('button'), function(b){ b.classList.toggle('on', b.dataset.mode===settings.mode); });
+      $('rateRange').value=settings.rate; $('rateVal').textContent='×'+Number(settings.rate).toFixed(2).replace(/0$/,'');
+      $('sentPauseSel').value=String(settings.sentPause);
+      $('paraPauseSel').value=String(settings.paraPause);
+      syncVoiceOptions();
+    }
+    $('modeSeg').addEventListener('click', function(e){
+      var b=e.target.closest('button'); if(!b) return;
+      settings.mode=b.dataset.mode; edgeDown=false; saveSettings(); syncSettingsUI();
+      if(playing){ playToken++; playCurrent(); }
+      setStatus(settings.mode==='edge'?'已切换到拟真 MP3：可后台、锁屏继续听':'已切换到设备语音：即时出声，但切后台会停');
+    });
+    $('voiceSel').addEventListener('change', function(){
+      if(settings.mode==='edge') settings.edgeVoice=$('voiceSel').value; else settings.deviceVoice=$('voiceSel').value;
+      saveSettings();
+      if(playing){ playToken++; playCurrent(); }
+    });
+    $('rateRange').addEventListener('input', function(){
+      settings.rate=parseFloat($('rateRange').value); saveSettings();
+      $('rateVal').textContent='×'+settings.rate.toFixed(2).replace(/0$/,'');
+    });
+    $('rateRange').addEventListener('change', function(){ if(playing){ playToken++; playCurrent(); } });
+    $('sentPauseSel').addEventListener('change', function(){ settings.sentPause=parseInt($('sentPauseSel').value,10); saveSettings(); });
+    $('paraPauseSel').addEventListener('change', function(){ settings.paraPause=parseInt($('paraPauseSel').value,10); saveSettings(); });
+    $('timerSel').addEventListener('change', function(){
+      if(sleepTimerId){ clearTimeout(sleepTimerId); sleepTimerId=null; }
+      var min=parseInt($('timerSel').value,10);
+      if(min>0){ sleepTimerId=setTimeout(function(){ stopPlayback(true); setStatus('定时到了，已停止播放。位置已记住。'); toast('听书定时关闭，已停在当前句'); }, min*60000); toast('已设 '+min+' 分钟后自动停'); }
+    });
+    $('btnSettings').addEventListener('click', function(){ $('settingsPanel').classList.toggle('hidden'); });
+
+    /* ============================================================
+       阅读器按钮 / 导入 / 事件绑定
+       ============================================================ */
+    $('btnPlay').addEventListener('click', togglePlay);
+    $('btnPrevSent').addEventListener('click', function(){ if(cur) stepSentence(-1); });
+    $('btnNextSent').addEventListener('click', function(){ if(cur) stepSentence(1); });
+    function goChapter(d){
+      if(!cur) return;
+      var nc=cur.ch+d; if(nc<0||nc>=cur.book.chapters.length) return;
+      var wasPlaying=playing; if(wasPlaying){ playToken++; try{audioEl.pause();}catch(e){} if(window.speechSynthesis) speechSynthesis.cancel(); }
+      renderChapter(nc, 0, true); cur.s=0;
+      saveProgress(cur.book.id, {listenCh:nc, listenSent:0});
+      updateNowUI(); window.scrollTo(0,0);
+      if(wasPlaying) playCurrent();
+    }
+    $('btnPrevCh').addEventListener('click', function(){ goChapter(-1); });
+    $('btnNextCh').addEventListener('click', function(){ goChapter(1); });
+    $('btnPrevCh2').addEventListener('click', function(){ goChapter(-1); });
+    $('btnNextCh2').addEventListener('click', function(){ goChapter(1); });
+    $('btnBack').addEventListener('click', function(){
+      stopPlayback(true);
+      cur=null;
+      $('view-reader').classList.add('hidden');
+      $('player').classList.add('hidden');
+      document.body.classList.remove('has-player');
+      $('view-library').classList.remove('hidden');
+      refreshLibrary(); window.scrollTo(0,0);
+    });
+    $('btnFontMinus').addEventListener('click', function(){ settings.fontSize=Math.max(15, settings.fontSize-1); saveSettings(); document.documentElement.style.setProperty('--read-size', settings.fontSize+'px'); });
+    $('btnFontPlus').addEventListener('click', function(){ settings.fontSize=Math.min(26, settings.fontSize+1); saveSettings(); document.documentElement.style.setProperty('--read-size', settings.fontSize+'px'); });
+    $('btnToc').addEventListener('click', function(){
+      if(!cur) return;
+      var list=$('tocList'); list.innerHTML='';
+      cur.book.chapters.forEach(function(c, i){
+        var b=document.createElement('button'); b.className='ch-item'+(i===cur.ch?' cur':''); b.type='button';
+        b.innerHTML='<span>'+esc(c.title)+'</span><span class="n">'+(cur.sentByCh[i]?cur.sentByCh[i].length:0)+' 句</span>';
+        b.addEventListener('click', function(){
+          $('tocDrawer').classList.add('hidden');
+          if(i!==cur.ch){ var d=i-cur.ch; cur.ch=i-d; goChapter(d); }
+        });
+        list.appendChild(b);
+      });
+      $('tocDrawer').classList.remove('hidden');
+    });
+    $('btnCloseToc').addEventListener('click', function(){ $('tocDrawer').classList.add('hidden'); });
+    $('tocDrawer').addEventListener('click', function(e){ if(e.target===$('tocDrawer')) $('tocDrawer').classList.add('hidden'); });
+
+    $('btnSampleRead').addEventListener('click', function(){ openBook('sample', false); });
+    $('btnSampleListen').addEventListener('click', function(){ openBook('sample', true); });
+
+    var fileInput=$('fileInput');
+    $('btnImport').addEventListener('click', function(){ fileInput.click(); });
+    fileInput.addEventListener('change', async function(){
+      var files=Array.prototype.slice.call(fileInput.files||[]); fileInput.value='';
+      for(var i=0;i<files.length;i++){
+        toast('正在导入《'+files[i].name+'》…', 6000);
+        try{ var b=await importFile(files[i]); toast('已导入《'+b.name+'》，共 '+b.totalSent+' 句'); }
+        catch(e){ toast('导入失败：'+(e&&e.message?e.message:e), 5000); }
+      }
+      refreshLibrary();
+    });
+    var importCard=$('importCard');
+    ['dragenter','dragover'].forEach(function(ev){ importCard.addEventListener(ev, function(e){ e.preventDefault(); importCard.classList.add('drag'); }); });
+    ['dragleave','drop'].forEach(function(ev){ importCard.addEventListener(ev, function(e){ e.preventDefault(); importCard.classList.remove('drag'); }); });
+    importCard.addEventListener('drop', async function(e){
+      var files=Array.prototype.slice.call((e.dataTransfer&&e.dataTransfer.files)||[]);
+      for(var i=0;i<files.length;i++){
+        toast('正在导入《'+files[i].name+'》…', 6000);
+        try{ var b=await importFile(files[i]); toast('已导入《'+b.name+'》，共 '+b.totalSent+' 句'); }
+        catch(err){ toast('导入失败：'+(err&&err.message?err.message:err), 5000); }
+      }
+      refreshLibrary();
+    });
+
+    /* 切后台时把位置再存一次（阅读/听书都不丢） */
+    document.addEventListener('visibilitychange', function(){
+      if(document.hidden && cur){ saveProgress(cur.book.id, {listenCh:cur.ch, listenSent:cur.s}); }
+    });
+    window.addEventListener('pagehide', function(){ if(cur) saveProgress(cur.book.id, {listenCh:cur.ch, listenSent:cur.s}); });
+
+    /* ---------------- 启动 ---------------- */
+    syncSettingsUI();
+    refreshLibrary();
+    </script>
+  </body>
+</html>
