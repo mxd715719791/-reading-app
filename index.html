@@ -158,6 +158,8 @@
       .seg button{flex:1; min-height:40px; border-radius:9px; font-size:14px; font-weight:500; color:var(--ink2)}
       .seg button.on{background:var(--paper); color:var(--ink); font-weight:700; box-shadow:0 1px 5px rgba(0,0,0,.12)}
       .rate-val{font-size:12px; color:var(--muted)}
+      .enc-row{display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin:4px 0 10px; font-size:14px; color:var(--ink2)}
+      .enc-row select{min-height:44px; border:1px solid var(--line); border-radius:10px; background:var(--paper); color:var(--ink); padding:0 10px; font-size:14px; max-width:100%}
 
       /* ---------- drawer / toast ---------- */
       .drawer{
@@ -204,6 +206,16 @@
           <p class="small">支持 TXT、EPUB、FB2；PDF 仅支持带文字层的（实验）。MOBI / AZW3 暂时不能直接导入，请先转成 EPUB 或 TXT。带 DRM 版权保护的书无法打开。</p>
           <button class="btn" id="btnImport" type="button">选择文件导入</button>
           <input type="file" id="fileInput" class="hidden" accept=".txt,.epub,.fb2,.pdf,text/plain,application/epub+zip,application/pdf" multiple />
+          <label class="enc-row">文字编码
+            <select id="encSel">
+              <option value="auto">自动识别（推荐）</option>
+              <option value="utf-8">UTF-8</option>
+              <option value="gb18030">GBK / GB2312（老中文书常用）</option>
+              <option value="big5">Big5（繁体老书）</option>
+              <option value="utf-16le">UTF-16</option>
+            </select>
+          </label>
+          <p class="small" style="margin:0 0 6px">导入后，书架上会显示这本书识别出的编码、全书字数、章数和句数，对照原书就能核对有没有导全、乱没乱码。导进来是乱码时，删掉这本、换一个编码再重新导入即可。</p>
           <p class="small" style="margin:12px 0 0">电脑上也可以把文件拖到这里。书文件本身只存这台手机的浏览器，不整本上传；用拟真 MP3 听书时，正在朗读的那一句会发送给微软语音服务生成音频。</p>
         </div>
 
@@ -238,6 +250,10 @@
             <li>「设备语音」模式：不用生成、点开就念，但用的是系统语音合成，切到后台或锁屏会被系统停掉，只适合亮屏时听。</li>
             <li>iPhone 内存紧张时（比如大型游戏），系统仍可能回收后台页面，这是 iOS 的限制，原生 App 之外都绕不开。</li>
           </ul>
+        </div>
+        <div class="howto">
+          <h3>关于开源语音模型（Kokoro）</h3>
+          <p>Kokoro-82M 是开源免费（Apache-2.0）的语音模型，但模型有几百 MB，在 iPhone 浏览器里实时合成会很卡、锁屏还会被系统挂起，中文韵律也不如神经语音稳。所以这个网页版主用微软免费的神经语音（默认晓晓），同样免费、不用 Key，听感接近微信读书那类 AI 朗读；Kokoro 更适合先在电脑上把整本书转成 MP3 再听。如果播放器状态栏显示「设备语音」，说明拟真语音这次没生成成功（多半是网络），那才是机器人音，重新点播放会再试拟真语音。</p>
         </div>
         <div class="howto">
           <h3>进度记在哪里</h3>
@@ -296,6 +312,9 @@
               <button type="button" data-mode="edge">拟真 MP3 · 可后台</button>
               <button type="button" data-mode="device">设备语音 · 即时</button>
             </div>
+          </div>
+          <div class="full">
+            <button class="btn small ghost" id="btnVoiceTest" type="button" style="width:100%; justify-content:center">试听当前声音（先验证是不是拟真音）</button>
           </div>
           <div>
             <label for="voiceSel">声音</label>
@@ -435,17 +454,37 @@
       var out=[];
       if(segmenter){
         try{
-          var parts=segmenter.segment(t), buf='';
-          parts.forEach(function(p){ buf+=p.segment; if(/[。！？!?；;…」』”"）)]\s*$/.test(buf) || buf.length>110){ out.push(buf); buf=''; } });
+          var buf='';
+          /* Intl.Segments 只有迭代器、没有 forEach，必须用 for..of 逐段取 */
+          for(var part of segmenter.segment(t)){
+            buf+=part.segment;
+            if(/[。！？!?；;…」』”"）)]\s*$/.test(buf) || buf.length>=120){ out.push(buf); buf=''; }
+          }
           if(buf) out.push(buf);
           out=out.map(function(s){ return s.trim(); }).filter(Boolean);
           if(out.length) return mergeShort(out);
         }catch(e){}
       }
-      var re=/[^。！？!?；;…]+[。！？!?；;…]+[」』”"）)\]]*|[^。！？!?；;…]+$/g, m;
-      while((m=re.exec(t))!==null){ var s=m[0].trim(); if(s) out.push(s); }
-      if(!out.length) out=[t];
-      return mergeShort(out);
+      return mergeShort(splitByScan(t));
+    }
+    /* 没有 Intl.Segmenter 时的逐字断句：认中文标点、英文句点（避开小数）、引号收尾 */
+    function splitByScan(t){
+      var out=[], buf='';
+      for(var i=0;i<t.length;i++){
+        var c=t[i]; buf+=c;
+        var ender=false;
+        if('。！？!?；;'.indexOf(c)>=0 || c==='…') ender=true;
+        else if(c==='.'){
+          var nx=t[i+1];
+          if((!nx || /\s/.test(nx) || '」』”"）)'.indexOf(nx)>=0) && !/\d/.test(t[i-1]||'')) ender=true;
+        }
+        if(ender){
+          while(i+1<t.length && ('」』”"’\'）)]…'.indexOf(t[i+1])>=0)){ buf+=t[i+1]; i++; }
+          out.push(buf); buf='';
+        } else if(buf.length>=180){ out.push(buf); buf=''; }
+      }
+      if(buf.trim()) out.push(buf);
+      return out.map(function(s){ return s.trim(); }).filter(Boolean);
     }
     function mergeShort(arr){
       var out=[];
@@ -473,12 +512,97 @@
     function totalSentences(sentByCh){ return sentByCh.reduce(function(a,c){ return a+c.length; },0); }
     function sentencesBefore(sentByCh, ch){ var n=0; for(var i=0;i<ch;i++) n+=sentByCh[i].length; return n; }
 
-    /* ---------------- TXT 解析 ---------------- */
-    function decodeText(buf){
-      try{ return new TextDecoder('utf-8',{fatal:true}).decode(buf); }
-      catch(e){ try{ return new TextDecoder('gbk').decode(buf); }catch(e2){ return new TextDecoder('utf-8').decode(buf); } }
+    /* ---------------- 编码识别（乱码修复） ----------------
+       先读原始字节：看 BOM → 看文件自带声明 → UTF-16 的 0 字节特征 →
+       依次严格试 UTF-8 / GB18030 / Big5（解不出就报错换下一种，不静默出乱码）→
+       最后按乱码（�）最少挑一个。用户也可在导入区手动指定编码强制重读。 */
+    function countBad(t){ var n=0; for(var i=0;i<t.length;i++){ var c=t.charCodeAt(i); if(c===0xFFFD) n+=3; else if(c<9 || (c>13 && c<32)) n+=1; } return n; }
+    function tryFatal(buf, label){ try{ return new TextDecoder(label, {fatal:true}).decode(buf); }catch(e){ return null; } }
+    function sniffDeclared(buf){
+      var head='', n=Math.min(buf.length, 1024);
+      for(var i=0;i<n;i++){ head+=(buf[i]<128? String.fromCharCode(buf[i]):' '); }
+      var m=head.match(/(?:encoding|charset)\s*=\s*["']?\s*([A-Za-z0-9._-]+)/i);
+      if(!m) return null;
+      var lab=m[1].toLowerCase();
+      if(lab.indexOf('gb')===0 || lab==='cp936' || lab==='windows-936' || lab==='x-gbk') return 'gb18030';
+      if(lab.indexOf('big5')===0) return 'big5';
+      if(lab.indexOf('utf-8')===0 || lab==='utf8') return 'utf-8';
+      if(lab.indexOf('utf-16')===0) return 'utf-16le';
+      if(lab.indexOf('shift')===0 || lab==='sjis' || lab==='windows-31j') return 'shift_jis';
+      if(lab.indexOf('euc-kr')===0 || lab==='windows-949') return 'euc-kr';
+      if(lab.indexOf('windows-1251')===0) return 'windows-1251';
+      return null;
     }
-    var CH_RE=/^\s*(第\s*[0-9零一二三四五六七八九十百千两]+\s*[章回节卷]|卷\s*[0-9零一二三四五六七八九十百千两]+|序章|楔子|引子|尾声|后记|番外[^\n]{0,20}|Chapter\s+\d+|CHAPTER\s+\d+)\s*(.*)$/;
+    function encName(lab){ return lab==='gb18030'?'GBK/GB18030':(lab==='big5'?'Big5':(lab==='utf-8'?'UTF-8':lab.toUpperCase())); }
+    /* 常用字表 + 像不像正常中文的打分：GB18030 与 Big5 字节范围大量重叠，
+       错的那个也能“严格解码成功”，只能靠内容像不像正常中文来区分 */
+    var COMMON_SET={};
+    '的一了是我不在他有来中大上说个国和地们要时就出会可也你对生自以能着去之过家学起还发成事只作把想已无同道心然什二后点么间好新开因样天如方三其高手但现前些所见经头面进给力将长通太认几于理得关己使真知本各章当并场意与非区每总老实员却活六承立法种外指果断市万象料里她它孩女小很多又都两着看那问下被让向行法子合四为在主年动两分已候世部或正军客决只品光解基器流比重立线论教类难形报精该车称平影风儿史格最带快争须等程战际五算实物各眼回历况张言整至素缺信叫帮安觉丽奇访寻套创装临袭昨广圆半刚专读细型据象持资睛闻皮友消游煤医营包汽环泛境促冒愿拥普诉济侵灰溢态视神免剧超滥及粗牌烟剂食午尘哥浓虫饱讯祈既订伙忆纳姐搜玛销户忘宪诗页孟援铸腰奏砍狠讼宾纵番乌掩盗扎犯姜凉腔纠泡'.split('').forEach(function(c){ COMMON_SET[c]=1; });
+    function plausibility(t){
+      if(!t || !t.length) return -999;
+      var cjk=0, common=0, pen=0;
+      for(var i=0;i<t.length;i++){
+        var c=t.charCodeAt(i);
+        if(c>=0x4E00 && c<=0x9FFF){ cjk++; if(COMMON_SET[t[i]]) common++; }
+        else if(c>=0xE000 && c<=0xF8FF) pen+=10;
+        else if((c>=0x3040 && c<=0x30FF) || (c>=0x3100 && c<=0x312F) || (c>=0xAC00 && c<=0xD7AF)) pen+=4;
+        else if(c===0xFFFD) pen+=6;
+        else if(c<9 || (c>13 && c<32)) pen+=2;
+      }
+      var ratio=cjk? (common/cjk) : 0;
+      var score=ratio*100 - (pen/Math.max(1,t.length))*100;
+      if(cjk===0 && t.length>20) score-=50;
+      return score;
+    }
+    function decodeText(buf, forced){
+      var u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf.buffer? buf : buf);
+      if(u8.length>=3 && u8[0]===0xEF && u8[1]===0xBB && u8[2]===0xBF) return {text:new TextDecoder('utf-8').decode(u8), enc:'UTF-8'};
+      if(u8.length>=2 && u8[0]===0xFF && u8[1]===0xFE) return {text:new TextDecoder('utf-16le').decode(u8), enc:'UTF-16'};
+      if(u8.length>=2 && u8[0]===0xFE && u8[1]===0xFF) return {text:new TextDecoder('utf-16be').decode(u8), enc:'UTF-16'};
+      if(forced && forced!=='auto'){
+        return {text:new TextDecoder(forced).decode(u8), enc:encName(forced)};
+      }
+      var decl=sniffDeclared(u8);
+      if(decl){ var dt=tryFatal(u8, decl); if(dt!=null && countBad(dt)<5) return {text:dt, enc:encName(decl)}; }
+      var sample=Math.min(u8.length, 400), zOdd=0, zEven=0, nz=0, i;
+      for(i=0;i<sample;i++){ if(u8[i]===0){ nz++; if(i%2) zOdd++; else zEven++; } }
+      if(sample>0 && nz>sample*0.15){
+        var t16=tryFatal(u8, zOdd>=zEven?'utf-16le':'utf-16be');
+        if(t16!=null) return {text:t16, enc:'UTF-16'};
+      }
+      var utf8ok=tryFatal(u8,'utf-8');
+      if(utf8ok!=null) return {text:utf8ok, enc:'UTF-8'};
+      /* UTF-8 严格解码最可靠，成功就定。剩下的候选（GB18030 / Big5 / 无 BOM 的 UTF-16）
+         全部试解，按内容像不像正常中文打分选最高的 */
+      var cands=[];
+      ['gb18030','big5','utf-16le','utf-16be'].forEach(function(lab){
+        var t=tryFatal(u8, lab);
+        if(t!=null) cands.push({lab:lab, text:t, score:plausibility(t)});
+      });
+      if(cands.length){
+        cands.sort(function(a,b){ return b.score-a.score; });
+        var top=cands[0];
+        return {text:top.text, enc:(top.lab.indexOf('utf-16')===0?'UTF-16':encName(top.lab))};
+      }
+      var u8nf=new TextDecoder('utf-8').decode(u8);
+      var fffd=0; for(i=0;i<u8nf.length;i++) if(u8nf.charCodeAt(i)===0xFFFD) fffd++;
+      if(fffd<=2) return {text:u8nf, enc:'UTF-8'};
+      var best=null, bestScore=Infinity, bestLab='gb18030';
+      ['gb18030','big5','utf-8'].forEach(function(lab){ var t=new TextDecoder(lab).decode(u8); var sc=countBad(t); if(sc<bestScore){ bestScore=sc; best=t; bestLab=lab; } });
+      return {text:best||'', enc:encName(bestLab)};
+    }
+    function forcedEnc(){ var s=$('encSel'); return s? s.value : 'auto'; }
+    /* 超长段落按整句 regroup 成小段，避免一整章挤在一个 <p> 里渲染卡顿；句子本身不切断 */
+    function addPara(arr, tx){
+      tx=String(tx||'').trim(); if(!tx) return;
+      if(tx.length<=600){ arr.push(tx); return; }
+      var ss=splitSentences(tx), buf='';
+      ss.forEach(function(s){ buf+=s; if(buf.length>=300){ arr.push(buf); buf=''; } });
+      if(buf) arr.push(buf);
+    }
+
+    /* ---------------- TXT 解析 ---------------- */
+    var CH_RE=/^\s*(第\s*[0-9零一二三四五六七八九十百千两]+\s*[章回节卷部篇]|卷\s*[0-9零一二三四五六七八九十百千两]+|序章|楔子|引子|尾声|后记|番外[^\n]{0,20}|Chapter\s+\d+|CHAPTER\s+\d+)\s*(.*)$/;
     function parseTXT(text){
       text=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
       var lines=text.split('\n'), chapters=[], cur=null;
@@ -492,7 +616,7 @@
           newCh(line); return;
         }
         if(m && line.length<=48 && cur.title==='开始' && cur.paragraphs.length===0){ cur.title=line; return; }
-        cur.paragraphs.push(line.replace(/^[　 ]+/,''));
+        addPara(cur.paragraphs, line.replace(/^[　 ]+/,''));
       });
       chapters=chapters.filter(function(c){ return c.paragraphs.length; });
       if(!chapters.length) chapters=[{title:'全文', paragraphs:text.split(/\n\s*\n/).map(function(s){return s.trim();}).filter(Boolean)}];
@@ -506,45 +630,75 @@
       segs.forEach(function(s){ if(s==='..') parts.pop(); else if(s!=='.'&&s!=='') parts.push(s); });
       return parts.join('/');
     }
+    /* 按本地名取 XML 元素：OPF 带命名空间（dc:title、opf:item）时 querySelector 会漏，用这个兜底 */
+    function byTag(root, name){
+      var list=[], i;
+      try{ var ns=root.getElementsByTagNameNS('*', name); for(i=0;i<ns.length;i++) list.push(ns[i]); }catch(e){}
+      if(!list.length){ var g=root.getElementsByTagName(name); for(i=0;i<g.length;i++) list.push(g[i]); }
+      return list;
+    }
     async function parseEPUB(buf){
       if(!window.JSZip) throw new Error('解析组件没加载成功，请检查网络后重试');
       var zip=await JSZip.loadAsync(buf);
       var names={}; zip.forEach(function(p,f){ names[p.toLowerCase()]=f; });
-      function file(path){ return names[path.toLowerCase()] || zip.file(path); }
-      var cont=await file('META-INF/container.xml').async('text');
+      function file(path){ return names[(path||'').toLowerCase()] || zip.file(path); }
+      var contFile=file('META-INF/container.xml');
+      if(!contFile) throw new Error('这本 EPUB 结构不完整，找不到 container.xml');
+      var cont=await contFile.async('text');
       var opfPath=(cont.match(/full-path="([^"]+)"/)||[])[1];
       if(!opfPath) throw new Error('这本 EPUB 结构不完整，找不到内容清单');
+      try{ opfPath=decodeURIComponent(opfPath); }catch(e){}
       var opfDir=opfPath.indexOf('/')>=0?opfPath.slice(0,opfPath.lastIndexOf('/')):'';
-      var opfXml=new DOMParser().parseFromString(await file(opfPath).async('text'),'text/xml');
+      var opfFile=file(opfPath);
+      if(!opfFile) throw new Error('这本 EPUB 的内容清单文件缺失');
+      var opfXml=new DOMParser().parseFromString(await opfFile.async('text'),'text/xml');
       var manifest={};
-      Array.prototype.forEach.call(opfXml.querySelectorAll('manifest > item'), function(it){
-        manifest[it.getAttribute('id')]={href:it.getAttribute('href'), props:it.getAttribute('properties')||'', type:it.getAttribute('media-type')||''};
+      byTag(opfXml,'item').forEach(function(it){
+        var id=it.getAttribute('id');
+        if(id) manifest[id]={href:it.getAttribute('href'), props:it.getAttribute('properties')||'', type:it.getAttribute('media-type')||''};
       });
-      var title=(opfXml.querySelector('metadata > title, metadata title')||{}).textContent||'';
-      var chapters=[];
-      var spine=Array.prototype.slice.call(opfXml.querySelectorAll('spine > itemref'));
+      var titleEls=byTag(opfXml,'title');
+      var title=titleEls.length?(titleEls[0].textContent||''):'';
+      var chapters=[], encUsed='';
+      var spine=byTag(opfXml,'itemref');
       for(var i=0;i<spine.length;i++){
-        var item=manifest[spine[i].getAttribute('idref')]; if(!item) continue;
+        if(spine[i].getAttribute('linear')==='no') continue;
+        var item=manifest[spine[i].getAttribute('idref')]; if(!item || !item.href) continue;
         if(/nav/.test(item.props)) continue;
-        var path=resolvePath(opfDir, decodeURIComponent(item.href));
+        var href=item.href.split('#')[0];
+        try{ href=decodeURIComponent(href); }catch(e){}
+        var path=resolvePath(opfDir, href);
         var f=file(path); if(!f) continue;
-        var html=await f.async('text');
-        var doc=new DOMParser().parseFromString(html,'text/html');
-        if(doc.body) Array.prototype.forEach.call(doc.body.querySelectorAll('script,style,img,svg'), function(n){ n.remove(); });
+        /* 章节文件按原始字节解码，尊重它自带的编码声明，不再一律当 UTF-8 */
+        var dec=decodeText(await f.async('uint8array'));
+        if(!encUsed) encUsed=dec.enc;
+        var doc=new DOMParser().parseFromString(dec.text,'text/html');
+        if(!doc.body) continue;
+        Array.prototype.forEach.call(doc.body.querySelectorAll('script,style,img,svg'), function(n){ n.remove(); });
         var head=doc.querySelector('h1,h2,h3');
         var chTitle=(head?head.textContent:'').replace(/\s+/g,' ').trim();
-        var paras=[], nodes=doc.body?doc.body.querySelectorAll('p,h1,h2,h3,h4,h5,li,blockquote,pre,div'):[];
-        var seen=new Set();
+        /* 只取最里层的文本块：外层块包含内层块时跳过外层，避免整章重复；
+           重复段落也不再按内容去重删掉——同一句话在正文里出现两次就是两次 */
+        var BLOCKS='p,h1,h2,h3,h4,h5,h6,li,blockquote,pre,td,th,dt,dd,figcaption';
+        var paras=[], nodes=doc.body.querySelectorAll(BLOCKS);
         Array.prototype.forEach.call(nodes, function(n){
-          if(n.querySelector && n.querySelector('p,h1,h2,h3,li,blockquote') && n.tagName==='DIV') return;
+          if(n.querySelector && n.querySelector(BLOCKS)) return;
           var tx=(n.textContent||'').replace(/\s+/g,' ').trim();
-          if(tx && !seen.has(tx)){ seen.add(tx); paras.push(tx); }
+          if(tx && paras[paras.length-1]!==tx) addPara(paras, tx);
         });
-        if(!paras.length && doc.body){ paras=doc.body.textContent.split(/\n+/).map(function(s){return s.replace(/\s+/g,' ').trim();}).filter(Boolean); }
+        if(!paras.length){
+          paras=[];
+          (doc.body.textContent||'').split(/\n+/).forEach(function(s){ addPara(paras, s.replace(/\s+/g,' ')); });
+        }
         if(paras.length) chapters.push({title:chTitle||('第'+(chapters.length+1)+'节'), paragraphs:paras});
       }
+      /* 封面/扉页这类几乎没字的文件不是正文，去掉免得打开书只看到几句话就“没了” */
+      if(chapters.length>1){
+        var kept=chapters.filter(function(c, idx){ return c.paragraphs.join('').length>=8 || idx===chapters.length-1; });
+        if(kept.length) chapters=kept;
+      }
       if(!chapters.length) throw new Error('没能从这本 EPUB 里提取出文字，可能是扫描图片版或受 DRM 保护');
-      return {title:title.trim(), chapters:chapters};
+      return {title:title.trim(), chapters:chapters, encoding:encUsed};
     }
 
     /* ---------------- FB2 解析 ---------------- */
@@ -601,14 +755,15 @@
       var ext=(file.name.split('.').pop()||'').toLowerCase();
       var buf=await file.arrayBuffer();
       var parsed=null, fmt=ext.toUpperCase();
-      if(ext==='txt'){ parsed={title:'', chapters:parseTXT(decodeText(buf))}; }
+      if(ext==='txt'){ var dt=decodeText(buf, forcedEnc()); parsed={title:'', chapters:parseTXT(dt.text), encoding:dt.enc}; }
       else if(ext==='epub'){ parsed=await parseEPUB(buf); }
-      else if(ext==='fb2'){ parsed=parseFB2(decodeText(buf)); }
+      else if(ext==='fb2'){ var df=decodeText(buf, forcedEnc()); parsed=parseFB2(df.text); parsed.encoding=df.enc; }
       else if(ext==='pdf'){ parsed=await parsePDF(buf); }
       else if(['mobi','azw3','azw','cbz','umd'].indexOf(ext)>=0){ throw new Error(file.name+'：这个格式暂时不能直接导入，请先转成 EPUB 或 TXT 再导入'); }
       else { throw new Error(file.name+'：不支持的格式'); }
       var name=(parsed.title||file.name.replace(/\.[^.]+$/,'')).trim()||'未命名';
-      var book={ id:uid(), name:name, format:fmt, size:file.size, addedAt:Date.now(), chapters:parsed.chapters };
+      var chars=parsed.chapters.reduce(function(a,c){ return a+(c.paragraphs||[]).join('').length; },0);
+      var book={ id:uid(), name:name, format:fmt, size:file.size, addedAt:Date.now(), chapters:parsed.chapters, chars:chars, encoding:parsed.encoding||'' };
       book.sentByCh=buildSentences(parsed.chapters);
       book.totalSent=totalSentences(book.sentByCh);
       if(!book.totalSent) throw new Error(file.name+'：没有提取到可读的文字');
@@ -650,9 +805,10 @@
         var p=getProgress(b.id);
         var readIdx=Math.min(sentencesBefore(sentByCh, Math.min(p.readCh, sentByCh.length-1))+(p.readSent||0), total);
         var pct=total?Math.floor(readIdx/total*100):0;
+        var chars=b.chars||(b.chapters||[]).reduce(function(a,c){ return a+(c.paragraphs||[]).join('').length; },0);
         var card=document.createElement('div'); card.className='book-card';
         card.innerHTML='<h3>'+esc(b.name)+'</h3>'+
-          '<div class="meta"><span class="badge">'+esc(b.format)+'</span><span>'+(b.chapters?b.chapters.length:0)+' 章</span><span>共 '+total+' 句</span>'+(b.size?'<span>'+fmtSize(b.size)+'</span>':'')+'</div>'+
+          '<div class="meta"><span class="badge">'+esc(b.format)+'</span>'+(b.encoding?'<span class="badge">编码 '+esc(b.encoding)+'</span>':'')+'<span>'+(b.chapters?b.chapters.length:0)+' 章</span><span>共 '+chars+' 字 · '+total+' 句</span>'+(b.size?'<span>'+fmtSize(b.size)+'</span>':'')+'</div>'+
           '<div class="prog">'+(readIdx>0?('已读到 '+pct+'% · 听到第 '+(sentencesBefore(sentByCh, Math.min(p.listenCh, sentByCh.length-1))+(p.listenSent||0)+1)+' 句'):'还没开始读')+'</div>'+
           '<div class="progbar"><i style="width:'+pct+'%"></i></div>'+
           '<div class="book-actions">'+
@@ -698,9 +854,12 @@
         if(!book.sentByCh) book.sentByCh=buildSentences(book.chapters);
         var p=getProgress(book.id);
         var ch=Math.min(p.readCh||0, book.chapters.length-1);
-        cur={ book:book, ch:ch, s:Math.min(p.listenSent||0, (book.sentByCh[ch]||[]).length-1), sentByCh:book.sentByCh,
-              listenCh:(p.listenCh!=null?p.listenCh:ch) };
-        if(p.listenCh!=null && book.sentByCh[p.listenCh]){ /* 听书位置独立于阅读章 */ }
+        var lCh=(p.listenCh!=null)? Math.min(p.listenCh, book.chapters.length-1) : ch;
+        var lS=Math.min(p.listenSent||0, Math.max(0,(book.sentByCh[lCh]||[]).length-1));
+        /* 阅读位置和听书位置分开：先按阅读位置打开，听书位置先存着，
+           等用户点播放时再跳过去接着听，不互相覆盖 */
+        cur={ book:book, ch:ch, s:(lCh===ch? lS:0), sentByCh:book.sentByCh,
+              pendingListen:(lCh!==ch || lS>0)? {ch:lCh, s:lS} : null };
         $('view-library').classList.add('hidden');
         $('view-reader').classList.remove('hidden');
         $('player').classList.remove('hidden');
@@ -753,6 +912,7 @@
     }
 
     function onSentenceTap(gi){
+      cur.pendingListen=null;
       cur.s=gi;
       saveProgress(cur.book.id, {listenCh:cur.ch, listenSent:gi});
       updateNowUI(); markPlayingSpan();
@@ -800,12 +960,42 @@
     /* ============================================================
        Edge TTS：WebSocket 直连生成 MP3
        ============================================================ */
-    function wsEdgeTTS(text, voice, rate){
+    var EDGE_TOKEN='6A5AA1D4EAFF4E9FB37E23D68491D6F4';
+    /* 微软现在要求 Sec-MS-GEC 鉴权参数（按 5 分钟取整的 Windows 时间戳 + Token 做 SHA-256），
+       缺了它连接会被拒、整段听书就掉回设备机器人音——这是之前声音机械的根源。 */
+    var gecCache={v:null, at:0};
+    async function secMsGEC(){
+      var nowSec=Math.floor(Date.now()/1000);
+      if(gecCache.v && nowSec-gecCache.at<240) return gecCache.v;
+      var str=null;
+      try{
+        var sec=BigInt(nowSec+11644473600);
+        sec-=sec%BigInt(300);
+        str=(sec*BigInt(10000000)).toString()+EDGE_TOKEN;
+      }catch(e){
+        var ticks=nowSec+11644473600; ticks-=ticks%300; ticks*=10000000;
+        str=String(Math.round(ticks))+EDGE_TOKEN;
+      }
+      if(!(window.crypto && crypto.subtle)) return null;
+      var digest=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+      var hash=Array.prototype.map.call(new Uint8Array(digest), function(b){ return ('0'+b.toString(16)).slice(-2); }).join('').toUpperCase();
+      gecCache={v:hash, at:nowSec};
+      return hash;
+    }
+    function hexId(){
+      var a=new Uint8Array(16), i;
+      if(window.crypto && crypto.getRandomValues) crypto.getRandomValues(a);
+      else for(i=0;i<16;i++) a[i]=Math.floor(Math.random()*256);
+      return Array.prototype.map.call(a, function(b){ return ('0'+b.toString(16)).slice(-2); }).join('');
+    }
+    async function wsEdgeTTS(text, voice, rate){
+      var gec=null;
+      try{ gec=await secMsGEC(); }catch(e){}
       return new Promise(function(resolve, reject){
-        var token='6A5AA1D4EAFF4E9FB37E23D68491D6F4';
-        var connId=fnv('c'+Date.now()+Math.random())+fnv('x'+Math.random());
-        var reqId=fnv('r'+Date.now()+Math.random())+fnv('y'+Math.random());
-        var url='wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken='+token+'&ConnectionId='+connId;
+        var token=EDGE_TOKEN;
+        var connId=hexId();
+        var reqId=hexId();
+        var url='wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken='+token+'&ConnectionId='+connId+(gec?('&Sec-MS-GEC='+gec+'&Sec-MS-GEC-Version=1-130.0.2849.68'):'');
         var ws, chunks=[], done=false, timer=null;
         function fail(e){ if(done) return; done=true; try{ ws&&ws.close(); }catch(_){} if(timer) clearTimeout(timer); reject(e||new Error('Edge TTS 连接失败')); }
         timer=setTimeout(function(){ fail(new Error('生成超时')); }, 20000);
@@ -852,7 +1042,13 @@
       if(memAudioCache[key]) return memAudioCache[key];
       var rec=await dbGetAudio(key);
       if(rec && rec.blob){ memAudioCache[key]=rec.blob; return rec.blob; }
-      var blob=await wsEdgeTTS(text, settings.edgeVoice, settings.rate);
+      /* 免费接口偶尔抖动：先自动重试一次，两次都失败才回退设备语音 */
+      var blob=null, lastErr=null;
+      for(var attempt=0; attempt<2; attempt++){
+        try{ blob=await wsEdgeTTS(text, settings.edgeVoice, settings.rate); break; }
+        catch(e){ lastErr=e; gecCache={v:null, at:0}; if(attempt===0) await new Promise(function(r){ setTimeout(r, 800); }); }
+      }
+      if(!blob) throw lastErr||new Error('Edge TTS 连接失败');
       memAudioCache[key]=blob; dbPutAudio(key, blob);
       return blob;
     }
@@ -872,9 +1068,19 @@
     /* ============================================================
        播放控制
        ============================================================ */
+    function jumpToPendingListen(){
+      if(!cur || !cur.pendingListen) return;
+      var pl=cur.pendingListen; cur.pendingListen=null;
+      if(pl.ch!==cur.ch){ suppressReadSave=true; renderChapter(pl.ch, pl.s, true); suppressReadSave=false; }
+      cur.s=Math.min(pl.s, Math.max(0,(cur.sentByCh[cur.ch]||[]).length-1));
+      saveProgress(cur.book.id, {listenCh:cur.ch, listenSent:cur.s});
+    }
+    function setPlaybackSession(){ try{ if(navigator.audioSession) navigator.audioSession.type='playback'; }catch(e){} }
     function startListening(ch, s){
       if(ch!=null) cur.ch=ch;
       if(s!=null) cur.s=s;
+      cur.pendingListen=null;
+      setPlaybackSession();
       edgeDown=false;
       playing=true; playToken++;
       updateNowUI();
@@ -891,6 +1097,8 @@
     function togglePlay(){
       if(!cur) return;
       if(playing){ stopPlayback(); return; }
+      jumpToPendingListen();
+      setPlaybackSession();
       edgeDown=false;
       playing=true; playToken++;
       updateNowUI();
@@ -944,6 +1152,7 @@
     }
     function stepSentence(dir){
       if(!cur) return;
+      if(cur.pendingListen && !playing){ jumpToPendingListen(); updateNowUI(); markPlayingSpan(); scrollToCurrentSentence(); return; }
       var list=cur.sentByCh[cur.ch];
       var ns=cur.s+dir;
       if(ns>=list.length){
@@ -1051,6 +1260,32 @@
       if(min>0){ sleepTimerId=setTimeout(function(){ stopPlayback(true); setStatus('定时到了，已停止播放。位置已记住。'); toast('听书定时关闭，已停在当前句'); }, min*60000); toast('已设 '+min+' 分钟后自动停'); }
     });
     $('btnSettings').addEventListener('click', function(){ $('settingsPanel').classList.toggle('hidden'); });
+    $('btnVoiceTest').addEventListener('click', async function(){
+      var sample='您好，这是现在的朗读声音。雨停的时候，天边出了一道很淡的彩虹，我们的故事，就从这里开始。';
+      if(playing) stopPlayback(true);
+      if(cur) cur.pendingListen=null;
+      if(settings.mode==='device'){
+        if(!window.speechSynthesis){ setStatus('这台设备的浏览器不支持设备语音', true); return; }
+        speechSynthesis.cancel();
+        var u=new SpeechSynthesisUtterance(sample); u.rate=settings.rate;
+        var dv=pickDeviceVoice(); if(dv){ u.voice=dv; u.lang=dv.lang; }
+        speechSynthesis.speak(u);
+        setStatus('正在试听：设备语音（系统音，会比拟真 MP3 机械）');
+        return;
+      }
+      setStatus('正在生成试听语音…');
+      try{
+        var blob=await getAudioBlob(sample);
+        if(curObjUrl){ URL.revokeObjectURL(curObjUrl); curObjUrl=null; }
+        curObjUrl=URL.createObjectURL(blob);
+        audioEl.src=curObjUrl; audioEl.playbackRate=1;
+        setPlaybackSession(); setupMediaSession();
+        await audioEl.play();
+        setStatus('正在试听：拟真 MP3（微软神经语音），这就是听书时的声音');
+      }catch(e){
+        setStatus('试听生成失败：'+(e&&e.message?e.message:'网络问题')+'。检查网络后重新点播放会再试。', true);
+      }
+    });
 
     /* ============================================================
        阅读器按钮 / 导入 / 事件绑定
@@ -1061,6 +1296,7 @@
     function goChapter(d){
       if(!cur) return;
       var nc=cur.ch+d; if(nc<0||nc>=cur.book.chapters.length) return;
+      cur.pendingListen=null;
       var wasPlaying=playing; if(wasPlaying){ playToken++; try{audioEl.pause();}catch(e){} if(window.speechSynthesis) speechSynthesis.cancel(); }
       renderChapter(nc, 0, true); cur.s=0;
       saveProgress(cur.book.id, {listenCh:nc, listenSent:0});
@@ -1108,7 +1344,7 @@
       var files=Array.prototype.slice.call(fileInput.files||[]); fileInput.value='';
       for(var i=0;i<files.length;i++){
         toast('正在导入《'+files[i].name+'》…', 6000);
-        try{ var b=await importFile(files[i]); toast('已导入《'+b.name+'》，共 '+b.totalSent+' 句'); }
+        try{ var b=await importFile(files[i]); toast('已导入《'+b.name+'》：共 '+b.chars+' 字、'+(b.chapters?b.chapters.length:0)+' 章、'+b.totalSent+' 句'+(b.encoding?'，编码 '+b.encoding:''), 5000); }
         catch(e){ toast('导入失败：'+(e&&e.message?e.message:e), 5000); }
       }
       refreshLibrary();
@@ -1120,7 +1356,7 @@
       var files=Array.prototype.slice.call((e.dataTransfer&&e.dataTransfer.files)||[]);
       for(var i=0;i<files.length;i++){
         toast('正在导入《'+files[i].name+'》…', 6000);
-        try{ var b=await importFile(files[i]); toast('已导入《'+b.name+'》，共 '+b.totalSent+' 句'); }
+        try{ var b=await importFile(files[i]); toast('已导入《'+b.name+'》：共 '+b.chars+' 字、'+(b.chapters?b.chapters.length:0)+' 章、'+b.totalSent+' 句'+(b.encoding?'，编码 '+b.encoding:''), 5000); }
         catch(err){ toast('导入失败：'+(err&&err.message?err.message:err), 5000); }
       }
       refreshLibrary();
